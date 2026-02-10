@@ -36,6 +36,17 @@ function advance_turn(state: Shithead_state, steps = 1): number {
   return ((state.current_player_index + state.direction * steps) % len + len) % len
 }
 
+/** Advance turn, skipping `skip_count` other players.
+ *  The current player is never counted as a skipped player.
+ *  If all others are evenly skipped (full cycles), current player goes again. */
+function advance_turn_skip(state: Shithead_state, skip_count: number): number {
+  const others = state.player_order.length - 1
+  if (others === 0) return state.current_player_index
+  const remaining = skip_count % others
+  if (remaining === 0) return state.current_player_index
+  return advance_turn(state, remaining + 1)
+}
+
 function find_card_in_list(cards: Card[], card_id: string): number {
   return cards.findIndex((c) => c.id === card_id)
 }
@@ -83,6 +94,7 @@ function clone_state(state: Shithead_state): Shithead_state {
     phase: state.phase,
     ready_players: new Set(state.ready_players),
     last_effect: state.last_effect,
+    last_revealed_card: state.last_revealed_card,
   }
 }
 
@@ -131,6 +143,7 @@ export const shithead_definition: Card_game_definition<
       phase: 'swap',
       ready_players: new Set(),
       last_effect: null,
+      last_revealed_card: null,
     }
   },
 
@@ -194,25 +207,23 @@ export const shithead_definition: Card_game_definition<
       return { valid: true }
     }
 
+    if (cmd.type === 'PLAY_FACE_DOWN') {
+      const source = get_playable_source(player_state)
+      if (source !== 'face_down') {
+        return { valid: false, reason: 'Can only play face-down when hand and face-up are empty' }
+      }
+      if (cmd.index < 0 || cmd.index >= player_state.face_down.length) {
+        return { valid: false, reason: 'Invalid face-down card index' }
+      }
+      return { valid: true }
+    }
+
     if (cmd.type === 'PLAY_CARD') {
       if (cmd.card_ids.length === 0) {
         return { valid: false, reason: 'Must play at least one card' }
       }
 
       const source = get_playable_source(player_state)
-
-      // Playing from face-down is always blind — only one card at a time
-      if (source === 'face_down') {
-        if (cmd.card_ids.length !== 1) {
-          return { valid: false, reason: 'Can only play one face-down card at a time' }
-        }
-        if (find_card_in_list(player_state.face_down, cmd.card_ids[0]) === -1) {
-          return { valid: false, reason: 'Card not in face-down pile' }
-        }
-        // Face-down plays are blind — always valid structurally, but might fail on the pile
-        return { valid: true }
-      }
-
       const source_cards = source === 'hand' ? player_state.hand : player_state.face_up
 
       // Validate all cards exist in the source
@@ -243,6 +254,58 @@ export const shithead_definition: Card_game_definition<
 
   apply_command(state: Shithead_state, cmd: Shithead_command): Shithead_state {
     const next = clone_state(state)
+    next.last_revealed_card = null
+
+    if (cmd.type === 'PLAY_FACE_DOWN') {
+      const ps = next.players.get(cmd.player_id)!
+      const card = ps.face_down[cmd.index]
+      ps.face_down = [...ps.face_down.slice(0, cmd.index), ...ps.face_down.slice(cmd.index + 1)]
+      next.last_revealed_card = card
+
+      if (!can_play_on(card, next.discard_pile)) {
+        // Card can't be played — pick up pile + card into hand
+        ps.hand = [...ps.hand, ...next.discard_pile, card]
+        next.discard_pile = []
+        next.last_effect = null
+        next.current_player_index = advance_turn(next)
+        return next
+      }
+
+      // Card can be played — push to pile and apply effects
+      next.discard_pile.push(card)
+
+      const played_rank = card.rank
+      if (played_rank === '10' || check_four_of_a_kind_burn(next.discard_pile)) {
+        next.discard_pile = []
+        next.last_effect = 'burn'
+      } else if (played_rank === 'Q') {
+        next.direction = next.direction === Direction.CLOCKWISE ? Direction.COUNTER_CLOCKWISE : Direction.CLOCKWISE
+        next.last_effect = 'reverse'
+        next.current_player_index = advance_turn(next)
+      } else if (played_rank === '8') {
+        next.last_effect = 'skip'
+        next.current_player_index = advance_turn_skip(next, 1)
+      } else {
+        next.last_effect = null
+        next.current_player_index = advance_turn(next)
+      }
+
+      // Check if the player is now out
+      if (is_player_out(ps)) {
+        const player_idx = next.player_order.indexOf(cmd.player_id)
+        next.player_order.splice(player_idx, 1)
+        if (next.player_order.length <= 1) {
+          next.phase = 'finished'
+          return next
+        }
+        if (next.current_player_index > player_idx) {
+          next.current_player_index--
+        }
+        next.current_player_index = next.current_player_index % next.player_order.length
+      }
+
+      return next
+    }
 
     if (cmd.type === 'SWAP_CARD') {
       const ps = next.players.get(cmd.player_id)!
@@ -279,45 +342,23 @@ export const shithead_definition: Card_game_definition<
     if (cmd.type === 'PLAY_CARD') {
       const ps = next.players.get(cmd.player_id)!
       const source = get_playable_source(ps)
+      const source_cards = source === 'hand' ? ps.hand : ps.face_up
+      const played_cards: Card[] = []
+      let remaining = [...source_cards]
 
-      if (source === 'face_down') {
-        // Blind play from face-down
-        const card_id = cmd.card_ids[0]
-        const result = remove_card(ps.face_down, card_id)!
-        const card = result.card
-        ps.face_down = result.remaining
-
-        // If the card can't be played, pick up the pile + the card
-        if (!can_play_on(card, next.discard_pile)) {
-          ps.hand = [...ps.hand, ...next.discard_pile, card]
-          next.discard_pile = []
-          next.last_effect = null
-          next.current_player_index = advance_turn(next)
-          return next
-        }
-
-        // Card can be played
-        next.discard_pile.push(card)
-      } else {
-        // Play from hand or face-up
-        const source_cards = source === 'hand' ? ps.hand : ps.face_up
-        const played_cards: Card[] = []
-        let remaining = [...source_cards]
-
-        for (const card_id of cmd.card_ids) {
-          const result = remove_card(remaining, card_id)!
-          played_cards.push(result.card)
-          remaining = result.remaining
-        }
-
-        if (source === 'hand') {
-          ps.hand = remaining
-        } else {
-          ps.face_up = remaining
-        }
-
-        next.discard_pile.push(...played_cards)
+      for (const card_id of cmd.card_ids) {
+        const result = remove_card(remaining, card_id)!
+        played_cards.push(result.card)
+        remaining = result.remaining
       }
+
+      if (source === 'hand') {
+        ps.hand = remaining
+      } else {
+        ps.face_up = remaining
+      }
+
+      next.discard_pile.push(...played_cards)
 
       // Check for special card effects
       const played_rank = top_card(next.discard_pile)?.rank
@@ -335,24 +376,20 @@ export const shithead_definition: Card_game_definition<
         } else {
           next.last_effect = null
         }
-        // In 2-player with odd Qs, same player goes again
-        if (next.player_order.length === 2 && num_played % 2 === 1) {
-          // Don't advance — acts like skip in 2-player
-        } else {
-          next.current_player_index = advance_turn(next)
-        }
+        next.current_player_index = advance_turn(next)
       } else if (played_rank === '8') {
-        // Skip: advance 1 + num_played (skip N players for N 8s)
+        // Skip: each 8 skips one other player
         next.last_effect = 'skip'
-        next.current_player_index = advance_turn(next, 1 + num_played)
+        next.current_player_index = advance_turn_skip(next, num_played)
       } else {
         next.last_effect = null
         next.current_player_index = advance_turn(next)
       }
 
-      // Draw back up to hand size if cards remain in deck
-      if (source === 'hand' && next.deck.length > 0) {
-        const deficit = cmd.card_ids.length
+      // Draw back up to minimum hand size if below it
+      const min_hand = DEFAULT_SHITHEAD_CONFIG.num_hand
+      if (source === 'hand' && next.deck.length > 0 && ps.hand.length < min_hand) {
+        const deficit = min_hand - ps.hand.length
         const { drawn, remaining } = draw_cards(next.deck, deficit)
         ps.hand = [...ps.hand, ...drawn]
         next.deck = remaining
@@ -412,6 +449,7 @@ export const shithead_definition: Card_game_definition<
       direction: state.direction,
       ready_players: [...state.ready_players],
       last_effect: state.last_effect,
+      last_revealed_card: state.last_revealed_card,
     }
   },
 

@@ -24,6 +24,7 @@ export interface Visible_shithead_state {
   direction: Direction
   ready_players: string[]
   last_effect: 'burn' | 'reverse' | 'skip' | null
+  last_revealed_card: Card | null
 }
 
 export const game_store = $state<{

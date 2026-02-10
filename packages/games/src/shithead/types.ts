@@ -17,6 +17,7 @@ export interface Shithead_state {
   phase: 'swap' | 'play' | 'finished'
   ready_players: Set<string>
   last_effect: 'burn' | 'reverse' | 'skip' | null
+  last_revealed_card: Card | null
 }
 
 export type Shithead_command = Base_command &
@@ -24,6 +25,7 @@ export type Shithead_command = Base_command &
     | { type: 'PLAY_CARD'; card_ids: string[] }
     | { type: 'PICK_UP_PILE' }
     | { type: 'SWAP_CARD'; hand_card_id: string; face_up_card_id: string }
+    | { type: 'PLAY_FACE_DOWN'; index: number }
     | { type: 'READY' }
     | { type: 'UNREADY' }
   )
@@ -63,4 +65,5 @@ export interface Visible_shithead_state {
   direction: Direction
   ready_players: string[]
   last_effect: 'burn' | 'reverse' | 'skip' | null
+  last_revealed_card: Card | null
 }

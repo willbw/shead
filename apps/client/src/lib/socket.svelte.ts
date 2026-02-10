@@ -14,6 +14,7 @@ import { play_sound } from './sounds'
 type Typed_socket = Socket<Server_to_client_events, Client_to_server_events>
 
 const TOKEN_KEY = 'shead_token'
+const PLAYER_ID_KEY = 'shead_player_id'
 
 // Only create socket in the browser
 export const socket: Typed_socket = browser
@@ -26,16 +27,39 @@ export let reconnecting = $state({ value: false })
 // --- Wire socket events to stores (browser only) ---
 
 if (browser) {
+  // Debug helper — run shead_debug() in browser console
+  ;(window as any).shead_debug = () => {
+    const gs = game_store.game_state
+    console.table({
+      connected: connection_store.connected,
+      player_id: connection_store.player_id,
+      player_id_length: connection_store.player_id.length,
+      session_player_id: sessionStorage.getItem(PLAYER_ID_KEY),
+      session_token: sessionStorage.getItem(TOKEN_KEY) ? '(set)' : '(empty)',
+      reconnecting: reconnecting.value,
+      ready_players: gs ? JSON.stringify(gs.ready_players) : 'no game state',
+      am_in_ready_list: gs ? gs.ready_players.includes(connection_store.player_id) : 'no game state',
+      phase: gs?.phase ?? 'no game state',
+      current_player: gs?.current_player ?? 'no game state',
+    })
+  }
+
   socket.on('connect', () => {
     connection_store.connected = true
 
     // Attempt reconnection if we have a saved token
     const token = sessionStorage.getItem(TOKEN_KEY)
     if (token) {
+      // Restore player_id immediately so derived state works before the async callback
+      const saved_id = sessionStorage.getItem(PLAYER_ID_KEY)
+      if (saved_id) {
+        connection_store.player_id = saved_id
+      }
       reconnecting.value = true
       socket.emit('player:reconnect', token, (result) => {
         if (result.ok) {
           connection_store.player_id = result.player_id
+          sessionStorage.setItem(PLAYER_ID_KEY, result.player_id)
           connection_store.player_name = result.player_name
           if (result.room) {
             lobby_store.room = result.room
@@ -46,6 +70,8 @@ if (browser) {
         } else {
           // Token invalid — clear it
           sessionStorage.removeItem(TOKEN_KEY)
+          sessionStorage.removeItem(PLAYER_ID_KEY)
+          connection_store.player_id = ''
         }
         reconnecting.value = false
       })
@@ -57,6 +83,7 @@ if (browser) {
     // Only use if we didn't already reconnect with an existing session
     if (!sessionStorage.getItem(TOKEN_KEY)) {
       connection_store.player_id = data.player_id
+      sessionStorage.setItem(PLAYER_ID_KEY, data.player_id)
     }
   })
 
@@ -165,6 +192,7 @@ export function leave_room(): Promise<void> {
         game_store.selected_card_ids = []
         game_store.scores = null
         sessionStorage.removeItem(TOKEN_KEY)
+        sessionStorage.removeItem(PLAYER_ID_KEY)
         resolve()
       } else {
         reject(new Error(result.reason))

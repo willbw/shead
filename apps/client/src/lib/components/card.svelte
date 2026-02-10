@@ -5,10 +5,11 @@
 		card: Card
 		selected?: boolean
 		disabled?: boolean
+		on_pile?: boolean
 		onclick?: () => void
 	}
 
-	let { card, selected = false, disabled = false, onclick }: Props = $props()
+	let { card, selected = false, disabled = false, on_pile = false, onclick }: Props = $props()
 
 	const HINT_TEXT: Record<string, string> = {
 		'2': 'Reset',
@@ -31,12 +32,14 @@
 
 	const is_red = $derived(card.suit === 'hearts' || card.suit === 'diamonds')
 	const suit_symbol = $derived(SUIT_SYMBOLS[card.suit] ?? '?')
+	const is_invisible = $derived(card.rank === '3' && on_pile)
 </script>
 
 <button
 	class="flex flex-col items-center justify-center rounded-lg border-2 bg-white shadow-sm transition-all select-none
 		{selected ? 'border-blue-500 ring-2 ring-blue-300 -translate-y-2' : 'border-gray-300'}
-		{disabled ? 'opacity-40 cursor-not-allowed' : onclick ? 'cursor-pointer hover:border-gray-400 active:scale-95' : 'cursor-default'}"
+		{disabled ? 'opacity-40 cursor-not-allowed' : onclick ? 'cursor-pointer hover:border-gray-400 active:scale-95' : 'cursor-default'}
+		{is_invisible ? 'opacity-50' : ''}"
 	style="width: var(--card-w); height: var(--card-h); min-width: 40px; min-height: 44px"
 	onclick={disabled ? undefined : onclick}
 	type="button"

@@ -68,6 +68,7 @@ function deal_deterministic(deck: Card[], players: Player[]): Shithead_state {
     phase: 'swap',
     ready_players: new Set(),
     last_effect: null,
+    last_revealed_card: null,
   }
 }
 
@@ -324,9 +325,10 @@ describe('shithead_definition', () => {
       expect(next.player_order[next.current_player_index]).toBe('p2')
     })
 
-    it('draws from deck after playing from hand', () => {
+    it('draws from deck after playing from hand when at minimum', () => {
       const state = setup_play_state()
       const p1 = state.players.get('p1')!
+      expect(p1.hand).toHaveLength(3) // starts at minimum
       const deck_size_before = state.deck.length
 
       const next = apply(state, {
@@ -338,6 +340,30 @@ describe('shithead_definition', () => {
       // Played 1, drew 1 → hand size stays at 3
       expect(next.players.get('p1')!.hand).toHaveLength(3)
       expect(next.deck).toHaveLength(deck_size_before - 1)
+    })
+
+    it('does not draw when hand is above minimum size', () => {
+      const state = setup_play_state()
+      const p1 = state.players.get('p1')!
+      // Give p1 extra cards (simulating having picked up the pile earlier)
+      p1.hand.push(make_card('diamonds', '4'), make_card('clubs', '6'))
+      expect(p1.hand).toHaveLength(5)
+      const deck_size_before = state.deck.length
+
+      // Play a 2 (always playable)
+      const two_card = make_card('diamonds', '2')
+      p1.hand.push(two_card)
+      state.discard_pile.push(make_card('clubs', '5'))
+
+      const next = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [two_card.id],
+      })
+
+      // Hand shrinks by 1 (6 → 5), no draw from deck since still above 3
+      expect(next.players.get('p1')!.hand).toHaveLength(5)
+      expect(next.deck).toHaveLength(deck_size_before)
     })
 
     it('allows playing multiple cards of the same rank', () => {
@@ -636,12 +662,13 @@ describe('shithead_definition', () => {
 
       const next = apply(play_state, {
         player_id: 'p1',
-        type: 'PLAY_CARD',
-        card_ids: [ps.face_down[0].id],
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
       })
 
       expect(next.players.get('p1')!.face_down).toHaveLength(2)
       expect(next.discard_pile).toContainEqual(make_card('hearts', 'A'))
+      expect(next.last_revealed_card).toEqual(make_card('hearts', 'A'))
     })
 
     it('blind face-down play that fails picks up the pile', () => {
@@ -657,17 +684,18 @@ describe('shithead_definition', () => {
 
       const next = apply(play_state, {
         player_id: 'p1',
-        type: 'PLAY_CARD',
-        card_ids: [ps.face_down[0].id],
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
       })
 
       // p1 should pick up the pile + the played card
       expect(next.players.get('p1')!.hand).toHaveLength(2)
       expect(next.discard_pile).toHaveLength(0)
       expect(next.players.get('p1')!.face_down).toHaveLength(0)
+      expect(next.last_revealed_card).toEqual(make_card('hearts', '4'))
     })
 
-    it('rejects playing more than one face-down card', () => {
+    it('rejects PLAY_FACE_DOWN with invalid index', () => {
       const deck = create_ordered_deck()
       const state = deal_deterministic(deck, PLAYERS)
       const ps = state.players.get('p1')!
@@ -679,9 +707,62 @@ describe('shithead_definition', () => {
 
       expect_invalid(play_state, {
         player_id: 'p1',
+        type: 'PLAY_FACE_DOWN',
+        index: 5,
+      }, 'Invalid face-down card index')
+
+      expect_invalid(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_FACE_DOWN',
+        index: -1,
+      }, 'Invalid face-down card index')
+    })
+
+    it('rejects PLAY_FACE_DOWN when hand is not empty', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = [make_card('hearts', 'A')]
+      ps.face_up = []
+      ps.face_down = [make_card('hearts', '3')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      expect_invalid(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
+      }, 'hand and face-up are empty')
+    })
+
+    it('last_revealed_card is cleared by next command', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = []
+      ps.face_up = []
+      ps.face_down = [make_card('hearts', 'A'), make_card('diamonds', '3')]
+      state.discard_pile = []
+      state.deck = []
+      // Give p2 a card that can play on an Ace (a 2 resets)
+      const p2 = state.players.get('p2')!
+      p2.hand = [make_card('clubs', '2'), make_card('spades', 'K'), make_card('diamonds', 'A')]
+      const play_state = ready_all(state)
+
+      const after_reveal = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
+      })
+      expect(after_reveal.last_revealed_card).toEqual(make_card('hearts', 'A'))
+
+      // p2 plays a 2 (always playable) — last_revealed_card should be cleared
+      const after_p2 = apply(after_reveal, {
+        player_id: 'p2',
         type: 'PLAY_CARD',
-        card_ids: [ps.face_down[0].id, ps.face_down[1].id],
-      }, 'one face-down card')
+        card_ids: [after_reveal.players.get('p2')!.hand[0].id],
+      })
+      expect(after_p2.last_revealed_card).toBeNull()
     })
   })
 
@@ -952,8 +1033,45 @@ describe('shithead_definition', () => {
         card_ids: [eight_h.id, eight_d.id],
       })
 
-      // p1 plays two 8s → advance 1+2=3 steps, wraps around → back to p1
+      // p1 plays two 8s → skip p2 and p3 → back to p1
       expect(next.player_order[next.current_player_index]).toBe('p1')
+    })
+
+    it('8 skip in 2-player game gives current player another turn', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      state.discard_pile = [make_card('hearts', '5')]
+      state.players.get('p1')!.hand = [make_card('diamonds', '8'), make_card('clubs', 'K'), make_card('spades', 'A')]
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [play_state.players.get('p1')!.hand[0].id],
+      })
+
+      // p1 plays 8 in 2-player → skip p2 → p1 goes again
+      expect(next.player_order[next.current_player_index]).toBe('p1')
+    })
+
+    it('three 8s in 3-player game skips correctly', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, THREE_PLAYERS)
+      state.discard_pile = [make_card('hearts', '5')]
+      const eight_h = make_card('hearts', '8')
+      const eight_d = make_card('diamonds', '8')
+      const eight_c = make_card('clubs', '8')
+      state.players.get('p1')!.hand = [eight_h, eight_d, eight_c]
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [eight_h.id, eight_d.id, eight_c.id],
+      })
+
+      // p1 plays three 8s in 3-player → skip p2, p3, p2 again → p3's turn
+      expect(next.player_order[next.current_player_index]).toBe('p3')
     })
 
     it('9 forces odd rank — even card rejected, odd accepted', () => {
@@ -1030,7 +1148,7 @@ describe('shithead_definition', () => {
       expect(next.last_effect).toBe('reverse')
     })
 
-    it('Q in 2-player = same player again', () => {
+    it('Q in 2-player advances to other player', () => {
       const state = setup_with_pile_and_hand(
         [make_card('hearts', '5')],
         [make_card('diamonds', 'Q'), make_card('clubs', 'K'), make_card('spades', 'A')],
@@ -1042,8 +1160,8 @@ describe('shithead_definition', () => {
         card_ids: [state.players.get('p1')!.hand[0].id],
       })
 
-      // In 2-player, single Q = same player goes again
-      expect(next.player_order[next.current_player_index]).toBe('p1')
+      // Q reverses direction and advances — other player's turn
+      expect(next.player_order[next.current_player_index]).toBe('p2')
       expect(next.direction).toBe(Direction.COUNTER_CLOCKWISE)
       expect(next.last_effect).toBe('reverse')
     })
@@ -1078,7 +1196,17 @@ describe('shithead_definition', () => {
     function take_turn(state: Shithead_state): Shithead_state {
       const pid = current_player(state)
       const ps = state.players.get(pid)!
-      const source = ps.hand.length > 0 ? ps.hand : ps.face_up.length > 0 ? ps.face_up : ps.face_down
+
+      // Face-down: use PLAY_FACE_DOWN with index 0
+      if (ps.hand.length === 0 && ps.face_up.length === 0 && ps.face_down.length > 0) {
+        return shithead_definition.apply_command(state, {
+          player_id: pid,
+          type: 'PLAY_FACE_DOWN',
+          index: 0,
+        })
+      }
+
+      const source = ps.hand.length > 0 ? ps.hand : ps.face_up
 
       // Try each card in the source
       for (const card of source) {

@@ -13,6 +13,7 @@
 	import GameStatus from '$lib/components/game_status.svelte'
 
 	let copied = $state(false)
+	let revealing = $state(false)
 
 	function handle_dismiss_error() {
 		game_store.error_message = null
@@ -93,18 +94,29 @@
 	const am_ready = $derived(gs ? gs.ready_players.includes(my_id ?? '') : false)
 	const ready_count = $derived(gs ? gs.ready_players.length : 0)
 	const total_players = $derived(gs ? gs.player_order.length : 0)
+	let ready_pending = $state(false)
 
 	async function handle_toggle_ready() {
-		await send_command({ type: am_ready ? 'UNREADY' : 'READY' })
+		if (ready_pending) return
+		ready_pending = true
+		try {
+			await send_command({ type: am_ready ? 'UNREADY' : 'READY' })
+		} finally {
+			ready_pending = false
+		}
 	}
 
 	// --- Play Phase ---
-	function handle_play_card_click(card_id: string, source: 'hand' | 'face_up' | 'face_down') {
+	async function handle_play_card_click(card_id: string, source: 'hand' | 'face_up' | 'face_down') {
 		if (!is_my_turn) return
 
 		if (source === 'face_down') {
-			// Blind play: immediately send
-			send_command({ type: 'PLAY_CARD', card_ids: [card_id] })
+			// Parse index from synthetic face_down_N id
+			const index = parseInt(card_id.replace('face_down_', ''), 10)
+			if (Number.isNaN(index)) return
+			await send_command({ type: 'PLAY_FACE_DOWN', index })
+			revealing = true
+			setTimeout(() => { revealing = false }, 1000)
 			return
 		}
 
@@ -259,15 +271,15 @@
 					<div class="flex flex-col items-center gap-1 {gs.last_effect === 'burn' ? 'animate-burn' : ''}">
 						<span class="text-xs text-green-300">Pile</span>
 						{#if pile_top}
-							<div class="relative" style="width: var(--card-w); height: var(--card-h)">
+							<div class="relative" style="width: {show_effective ? 'calc(var(--card-w) * 1.6)' : 'var(--card-w)'}; height: var(--card-h)">
 								{#if show_effective && pile_effective}
-									<div class="absolute inset-0 -rotate-6 opacity-70">
-										<CardComponent card={pile_effective} />
+									<div class="absolute left-0 top-0">
+										<CardComponent card={pile_effective} on_pile />
 									</div>
 								{/if}
 								{#key pile_top.id}
-									<div class="absolute inset-0" in:fly={{ y: -20, duration: 200 }}>
-										<CardComponent card={pile_top} />
+									<div class="absolute top-0 {show_effective ? 'right-0 rotate-6' : 'left-0'}" in:fly={{ y: -20, duration: 200 }}>
+										<CardComponent card={pile_top} on_pile />
 									</div>
 								{/key}
 							</div>
@@ -280,7 +292,16 @@
 					</div>
 				</div>
 
-				<!-- Action Buttons -->
+				<!-- Reveal Overlay -->
+			{#if revealing && gs.last_revealed_card}
+				<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+					<div class="animate-reveal-card">
+						<CardComponent card={gs.last_revealed_card} />
+					</div>
+				</div>
+			{/if}
+
+			<!-- Action Buttons -->
 				{#if gs.phase === 'swap'}
 					<div class="flex gap-2">
 						{#if swap_hand_card_id}
@@ -292,7 +313,8 @@
 					<div class="flex flex-col items-center gap-1">
 						<button
 							onclick={handle_toggle_ready}
-							class="rounded px-6 py-2 text-sm font-medium transition-colors
+							disabled={ready_pending}
+							class="rounded px-6 py-2 text-sm font-medium transition-colors disabled:opacity-50
 								{am_ready ? 'bg-green-600 hover:bg-green-500 ring-2 ring-green-400' : 'bg-purple-600 hover:bg-purple-500'}"
 						>
 							{am_ready ? 'Ready!' : 'Ready'}
