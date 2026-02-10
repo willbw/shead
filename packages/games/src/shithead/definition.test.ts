@@ -232,6 +232,29 @@ describe('shithead_definition', () => {
       expect_invalid(s1, { player_id: 'p1', type: 'READY' }, 'Already ready')
     })
 
+    it('allows unready after ready', () => {
+      const state = create_test_game(PLAYERS)
+      const s1 = apply(state, { player_id: 'p1', type: 'READY' })
+      expect(s1.ready_players.has('p1')).toBe(true)
+
+      const s2 = apply(s1, { player_id: 'p1', type: 'UNREADY' })
+      expect(s2.ready_players.has('p1')).toBe(false)
+      expect(s2.phase).toBe('swap')
+    })
+
+    it('rejects unready when not ready', () => {
+      const state = create_test_game(PLAYERS)
+      expect_invalid(state, { player_id: 'p1', type: 'UNREADY' }, 'Not ready yet')
+    })
+
+    it('allows re-ready after unready', () => {
+      const state = create_test_game(PLAYERS)
+      const s1 = apply(state, { player_id: 'p1', type: 'READY' })
+      const s2 = apply(s1, { player_id: 'p1', type: 'UNREADY' })
+      const s3 = apply(s2, { player_id: 'p1', type: 'READY' })
+      expect(s3.ready_players.has('p1')).toBe(true)
+    })
+
     it('rejects play commands during swap phase', () => {
       const state = create_test_game(PLAYERS)
       expect_invalid(state, {

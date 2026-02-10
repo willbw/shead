@@ -3,6 +3,7 @@
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
+	import { effective_top_card } from '@shead/shared'
 	import { connect, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
 	import { fly } from 'svelte/transition'
 	import CardComponent from '$lib/components/card.svelte'
@@ -89,8 +90,12 @@
 		}
 	}
 
-	async function handle_ready() {
-		await send_command({ type: 'READY' })
+	const am_ready = $derived(gs ? gs.ready_players.includes(my_id ?? '') : false)
+	const ready_count = $derived(gs ? gs.ready_players.length : 0)
+	const total_players = $derived(gs ? gs.player_order.length : 0)
+
+	async function handle_toggle_ready() {
+		await send_command({ type: am_ready ? 'UNREADY' : 'READY' })
 	}
 
 	// --- Play Phase ---
@@ -149,8 +154,10 @@
 		goto('/')
 	}
 
-	// Discard pile top card
+	// Discard pile top card + effective top (visible beneath 3s)
 	const pile_top = $derived(gs && gs.discard_pile.length > 0 ? gs.discard_pile[gs.discard_pile.length - 1] : null)
+	const pile_effective = $derived(gs ? effective_top_card(gs.discard_pile) ?? null : null)
+	const show_effective = $derived(pile_top !== null && pile_top.rank === '3' && pile_effective !== null && pile_effective.id !== pile_top.id)
 </script>
 
 <div class="flex min-h-screen flex-col bg-green-900 text-white">
@@ -218,6 +225,7 @@
 						player_name={opp.name}
 						state={opp.state}
 						is_current_turn={gs.current_player === opp.id}
+						ready={gs.phase === 'swap' && gs.ready_players.includes(opp.id)}
 					/>
 				{/each}
 			</div>
@@ -251,11 +259,18 @@
 					<div class="flex flex-col items-center gap-1 {gs.last_effect === 'burn' ? 'animate-burn' : ''}">
 						<span class="text-xs text-green-300">Pile</span>
 						{#if pile_top}
-							{#key pile_top.id}
-								<div in:fly={{ y: -20, duration: 200 }}>
-									<CardComponent card={pile_top} />
-								</div>
-							{/key}
+							<div class="relative" style="width: var(--card-w); height: var(--card-h)">
+								{#if show_effective && pile_effective}
+									<div class="absolute inset-0 -rotate-6 opacity-70">
+										<CardComponent card={pile_effective} />
+									</div>
+								{/if}
+								{#key pile_top.id}
+									<div class="absolute inset-0" in:fly={{ y: -20, duration: 200 }}>
+										<CardComponent card={pile_top} />
+									</div>
+								{/key}
+							</div>
 							<span class="text-xs text-green-400">{gs.discard_pile.length}</span>
 						{:else}
 							<div class="flex items-center justify-center rounded-lg border-2 border-dashed border-green-700" style="width: var(--card-w); height: var(--card-h)">
@@ -274,12 +289,16 @@
 							<p class="text-sm text-green-300">Tap a hand card, then a face-up card to swap</p>
 						{/if}
 					</div>
-					<button
-						onclick={handle_ready}
-						class="rounded bg-purple-600 px-6 py-2 text-sm font-medium hover:bg-purple-500"
-					>
-						Ready
-					</button>
+					<div class="flex flex-col items-center gap-1">
+						<button
+							onclick={handle_toggle_ready}
+							class="rounded px-6 py-2 text-sm font-medium transition-colors
+								{am_ready ? 'bg-green-600 hover:bg-green-500 ring-2 ring-green-400' : 'bg-purple-600 hover:bg-purple-500'}"
+						>
+							{am_ready ? 'Ready!' : 'Ready'}
+						</button>
+						<span class="text-xs text-green-400">{ready_count}/{total_players} ready</span>
+					</div>
 				{:else if gs.phase === 'play' && is_my_turn}
 					<div class="flex gap-2">
 						<button

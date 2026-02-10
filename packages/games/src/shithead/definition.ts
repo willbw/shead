@@ -167,6 +167,16 @@ export const shithead_definition: Card_game_definition<
       return { valid: true }
     }
 
+    if (cmd.type === 'UNREADY') {
+      if (state.phase !== 'swap') {
+        return { valid: false, reason: 'Unready is only valid during swap phase' }
+      }
+      if (!state.ready_players.has(cmd.player_id)) {
+        return { valid: false, reason: 'Not ready yet' }
+      }
+      return { valid: true }
+    }
+
     // Play-phase commands require it to be your turn
     if (state.phase !== 'play') {
       return { valid: false, reason: 'Game has not started yet' }
@@ -249,6 +259,11 @@ export const shithead_definition: Card_game_definition<
       if (next.ready_players.size === next.player_order.length) {
         next.phase = 'play'
       }
+      return next
+    }
+
+    if (cmd.type === 'UNREADY') {
+      next.ready_players.delete(cmd.player_id)
       return next
     }
 
@@ -395,6 +410,7 @@ export const shithead_definition: Card_game_definition<
       phase: state.phase,
       player_order: [...state.player_order],
       direction: state.direction,
+      ready_players: [...state.ready_players],
       last_effect: state.last_effect,
     }
   },

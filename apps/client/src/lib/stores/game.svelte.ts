@@ -22,6 +22,7 @@ export interface Visible_shithead_state {
   phase: 'swap' | 'play' | 'finished'
   player_order: string[]
   direction: Direction
+  ready_players: string[]
   last_effect: 'burn' | 'reverse' | 'skip' | null
 }
 

@@ -8,9 +8,10 @@
 		player_name: string
 		state: Visible_player_state
 		is_current_turn: boolean
+		ready?: boolean
 	}
 
-	let { player_name, state, is_current_turn }: Props = $props()
+	let { player_name, state, is_current_turn, ready = false }: Props = $props()
 </script>
 
 <div class="flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors duration-300 {is_current_turn ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}">
@@ -20,6 +21,9 @@
 		</span>
 		{#if is_current_turn}
 			<span class="text-xs text-yellow-600">(playing)</span>
+		{/if}
+		{#if ready}
+			<span class="text-xs text-green-600">(ready)</span>
 		{/if}
 	</div>
 
