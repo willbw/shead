@@ -25,7 +25,7 @@ function get_ctx(): AudioContext | null {
   return audio_ctx
 }
 
-type Sound_name = 'card_play' | 'burn' | 'error' | 'your_turn' | 'game_over'
+type Sound_name = 'card_play' | 'burn' | 'error' | 'your_turn' | 'game_over' | 'skip' | 'reverse'
 
 export function play_sound(name: Sound_name): void {
   if (_muted) return
@@ -112,6 +112,35 @@ export function play_sound(name: Sound_name): void {
       osc.connect(gain).connect(ctx.destination)
       osc.start(now)
       osc.stop(now + 0.6)
+      break
+    }
+    case 'skip': {
+      // Quick ascending blip
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(400, now)
+      osc.frequency.exponentialRampToValueAtTime(1200, now + 0.12)
+      gain.gain.setValueAtTime(0.15, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.15)
+      break
+    }
+    case 'reverse': {
+      // Descending-then-ascending swoosh
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(800, now)
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.15)
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.3)
+      gain.gain.setValueAtTime(0.15, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.35)
       break
     }
   }

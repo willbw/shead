@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Card, Player } from '@shead/shared'
-import { RANKS, SUITS } from '@shead/shared'
+import { RANKS, SUITS, Direction } from '@shead/shared'
 import { shithead_definition } from './definition'
 import type { Shithead_command, Shithead_state, Visible_shithead_state } from './types'
 import { DEFAULT_SHITHEAD_CONFIG } from './types'
@@ -64,6 +64,7 @@ function deal_deterministic(deck: Card[], players: Player[]): Shithead_state {
     players: player_map,
     player_order: players.map((p) => p.id),
     current_player_index: 0,
+    direction: Direction.CLOCKWISE,
     phase: 'swap',
     ready_players: new Set(),
     last_effect: null,
@@ -288,6 +289,8 @@ describe('shithead_definition', () => {
     it('advances turn after playing', () => {
       const state = setup_play_state()
       const p1 = state.players.get('p1')!
+      // Use a non-special card to test basic turn advancement
+      p1.hand = [make_card('hearts', '4'), make_card('clubs', 'K'), make_card('spades', 'A')]
 
       const next = apply(state, {
         player_id: 'p1',
@@ -624,7 +627,7 @@ describe('shithead_definition', () => {
       const ps = state.players.get('p1')!
       ps.hand = []
       ps.face_up = []
-      ps.face_down = [make_card('hearts', '3')] // Low card
+      ps.face_down = [make_card('hearts', '4')] // Low card
       state.discard_pile = [make_card('diamonds', 'K')] // High pile
       state.deck = []
       const play_state = ready_all(state)
@@ -783,6 +786,263 @@ describe('shithead_definition', () => {
 
       expect(visible.discard_pile).toHaveLength(1)
       expect(visible.discard_pile[0]).toEqual(make_card('hearts', '5'))
+    })
+  })
+
+  describe('play phase — new special cards (3, 8, 9, Q)', () => {
+    function setup_with_pile_and_hand(
+      pile_cards: Card[],
+      hand_cards: Card[],
+      players = PLAYERS,
+    ): Shithead_state {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, players)
+      state.discard_pile = pile_cards
+      state.players.get('p1')!.hand = hand_cards
+      return ready_all(state)
+    }
+
+    it('3 (invisible) can be played on anything', () => {
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', 'A')],
+        [make_card('diamonds', '3'), make_card('clubs', 'K'), make_card('spades', 'A')],
+      )
+
+      const next = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      })
+
+      expect(next.discard_pile).toHaveLength(2)
+    })
+
+    it('3 is invisible — effective top is card below', () => {
+      // Pile has a 5, then p1 plays a 3 on it
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '5')],
+        [make_card('diamonds', '3'), make_card('clubs', 'K'), make_card('spades', 'A')],
+      )
+
+      const after_3 = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      })
+
+      // Effective top is the 5 beneath the 3, so p2 needs >= 5
+      const p2 = after_3.players.get('p2')!
+      p2.hand = [make_card('hearts', '4'), make_card('clubs', '6'), make_card('spades', 'A')]
+
+      // 4 should fail (< 5)
+      expect_invalid(after_3, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [p2.hand[0].id],
+      }, 'Cannot play')
+
+      // 6 should succeed (>= 5)
+      const result = shithead_definition.validate_command(after_3, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [p2.hand[1].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('3 preserves 7s ≤7 restriction', () => {
+      // Pile: 7, then 3 on top — effective top is 7
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '7'), make_card('diamonds', '3')],
+        [make_card('clubs', '8'), make_card('spades', '5'), make_card('hearts', 'A')],
+      )
+
+      // 8 should fail (> 7)
+      expect_invalid(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      }, 'Cannot play')
+
+      // 5 should succeed (≤ 7)
+      const result = shithead_definition.validate_command(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[1].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('3 preserves 9s odd restriction', () => {
+      // Pile: 9, then 3 on top — effective top is 9
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '9'), make_card('diamonds', '3')],
+        [make_card('clubs', '8'), make_card('spades', '5'), make_card('hearts', 'A')],
+      )
+
+      // 8 should fail (even)
+      expect_invalid(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      }, 'Cannot play')
+
+      // 5 should succeed (odd)
+      const result = shithead_definition.validate_command(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[1].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('8 skips next player (3-player)', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, THREE_PLAYERS)
+      state.discard_pile = [make_card('hearts', '5')]
+      state.players.get('p1')!.hand = [make_card('diamonds', '8'), make_card('clubs', 'K'), make_card('spades', 'A')]
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [play_state.players.get('p1')!.hand[0].id],
+      })
+
+      // p1 plays 8, skips p2, should be p3's turn
+      expect(next.player_order[next.current_player_index]).toBe('p3')
+      expect(next.last_effect).toBe('skip')
+    })
+
+    it('two 8s skip two players (3-player, wraps around)', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, THREE_PLAYERS)
+      state.discard_pile = [make_card('hearts', '5')]
+      const eight_h = make_card('hearts', '8')
+      const eight_d = make_card('diamonds', '8')
+      state.players.get('p1')!.hand = [eight_h, eight_d, make_card('spades', 'A')]
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [eight_h.id, eight_d.id],
+      })
+
+      // p1 plays two 8s → advance 1+2=3 steps, wraps around → back to p1
+      expect(next.player_order[next.current_player_index]).toBe('p1')
+    })
+
+    it('9 forces odd rank — even card rejected, odd accepted', () => {
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '5')],
+        [make_card('diamonds', '9'), make_card('clubs', 'K'), make_card('spades', 'A')],
+      )
+
+      // p1 plays 9
+      const after_9 = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      })
+
+      const p2 = after_9.players.get('p2')!
+      p2.hand = [make_card('hearts', '8'), make_card('clubs', '5'), make_card('spades', 'A')]
+
+      // 8 should fail (even)
+      expect_invalid(after_9, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [p2.hand[0].id],
+      }, 'Cannot play')
+
+      // 5 should succeed (odd)
+      const result = shithead_definition.validate_command(after_9, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [p2.hand[1].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('2 and 10 are still playable on a 9', () => {
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '9')],
+        [make_card('diamonds', '2'), make_card('clubs', '10'), make_card('spades', 'A')],
+      )
+
+      // 2 should work (always playable)
+      const result_2 = shithead_definition.validate_command(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      })
+      expect(result_2.valid).toBe(true)
+
+      // 10 should work (always playable)
+      const result_10 = shithead_definition.validate_command(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[1].id],
+      })
+      expect(result_10.valid).toBe(true)
+    })
+
+    it('Q reverses direction (3-player)', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, THREE_PLAYERS)
+      state.discard_pile = [make_card('hearts', '5')]
+      state.players.get('p1')!.hand = [make_card('diamonds', 'Q'), make_card('clubs', 'K'), make_card('spades', 'A')]
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [play_state.players.get('p1')!.hand[0].id],
+      })
+
+      // Direction reversed, next turn goes to p3 (index wraps from 0 → -1 → 2)
+      expect(next.direction).toBe(Direction.COUNTER_CLOCKWISE)
+      expect(next.player_order[next.current_player_index]).toBe('p3')
+      expect(next.last_effect).toBe('reverse')
+    })
+
+    it('Q in 2-player = same player again', () => {
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '5')],
+        [make_card('diamonds', 'Q'), make_card('clubs', 'K'), make_card('spades', 'A')],
+      )
+
+      const next = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p1')!.hand[0].id],
+      })
+
+      // In 2-player, single Q = same player goes again
+      expect(next.player_order[next.current_player_index]).toBe('p1')
+      expect(next.direction).toBe(Direction.COUNTER_CLOCKWISE)
+      expect(next.last_effect).toBe('reverse')
+    })
+
+    it('two Qs cancel out (direction unchanged)', () => {
+      const q_h = make_card('hearts', 'Q')
+      const q_d = make_card('diamonds', 'Q')
+      const state = setup_with_pile_and_hand(
+        [make_card('hearts', '5')],
+        [q_h, q_d, make_card('spades', 'A')],
+      )
+
+      const next = apply(state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [q_h.id, q_d.id],
+      })
+
+      // Double Q cancels — direction stays 1, advances normally to p2
+      expect(next.direction).toBe(Direction.CLOCKWISE)
+      expect(next.player_order[next.current_player_index]).toBe('p2')
+      expect(next.last_effect).toBe(null)
     })
   })
 

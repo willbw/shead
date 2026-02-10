@@ -1,4 +1,5 @@
 import type { Card } from '@shead/shared'
+import { Direction } from '@shead/shared'
 
 export interface Visible_player_state {
   hand_count: number
@@ -20,7 +21,8 @@ export interface Visible_shithead_state {
   current_player: string
   phase: 'swap' | 'play' | 'finished'
   player_order: string[]
-  last_effect: 'burn' | 'reverse' | null
+  direction: Direction
+  last_effect: 'burn' | 'reverse' | 'skip' | null
 }
 
 export const game_store = $state<{

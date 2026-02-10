@@ -5,7 +5,7 @@
 		phase: 'swap' | 'play' | 'finished'
 		current_player_name: string
 		is_my_turn: boolean
-		last_effect: 'burn' | 'reverse' | null
+		last_effect: 'burn' | 'reverse' | 'skip' | null
 		error_message: string | null
 		on_dismiss_error?: () => void
 	}
@@ -40,6 +40,8 @@
 		<span class="text-xs font-semibold text-orange-500" transition:scale={{ duration: 300 }}>Pile burned!</span>
 	{:else if last_effect === 'reverse'}
 		<span class="text-xs font-semibold text-blue-500">Direction reversed!</span>
+	{:else if last_effect === 'skip'}
+		<span class="text-xs font-semibold text-purple-500" transition:scale={{ duration: 300 }}>Skip!</span>
 	{/if}
 
 	{#if error_message}

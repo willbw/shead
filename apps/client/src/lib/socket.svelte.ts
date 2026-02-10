@@ -82,6 +82,10 @@ if (browser) {
     if (next && prev) {
       if (next.last_effect === 'burn' && prev.last_effect !== 'burn') {
         play_sound('burn')
+      } else if (next.last_effect === 'skip' && prev.last_effect !== 'skip') {
+        play_sound('skip')
+      } else if (next.last_effect === 'reverse' && prev.last_effect !== 'reverse') {
+        play_sound('reverse')
       } else if (next.current_player !== prev.current_player) {
         const my_id = connection_store.player_id
         if (next.current_player === my_id) {

@@ -1,4 +1,5 @@
 import type { Base_command, Card } from '@shead/shared'
+import { Direction } from '@shead/shared'
 
 export interface Shithead_player_state {
   hand: Card[]
@@ -12,9 +13,10 @@ export interface Shithead_state {
   players: Map<string, Shithead_player_state>
   player_order: string[]
   current_player_index: number
+  direction: Direction
   phase: 'swap' | 'play' | 'finished'
   ready_players: Set<string>
-  last_effect: 'burn' | 'reverse' | null
+  last_effect: 'burn' | 'reverse' | 'skip' | null
 }
 
 export type Shithead_command = Base_command &
@@ -57,5 +59,6 @@ export interface Visible_shithead_state {
   current_player: string
   phase: 'swap' | 'play' | 'finished'
   player_order: string[]
-  last_effect: 'burn' | 'reverse' | null
+  direction: Direction
+  last_effect: 'burn' | 'reverse' | 'skip' | null
 }

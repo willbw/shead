@@ -1,5 +1,5 @@
-import type { Card, Player, Rank, Validation_result } from '@shead/shared'
-import { create_deck, shuffle } from '@shead/shared'
+import type { Card, Player, Validation_result } from '@shead/shared'
+import { create_deck, shuffle, can_play_on, RANK_VALUES, effective_top_card, Direction } from '@shead/shared'
 import type { Card_game_definition } from '@shead/game-engine'
 import type {
   Shithead_command,
@@ -11,42 +11,8 @@ import type {
 } from './types'
 import { DEFAULT_SHITHEAD_CONFIG } from './types'
 
-const RANK_VALUES: Record<Rank, number> = {
-  '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
-  '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
-}
-
 function top_card(pile: Card[]): Card | undefined {
   return pile[pile.length - 1]
-}
-
-/** Find the effective top card, skipping any 7s on top to find what was played before them. */
-function effective_top_card(pile: Card[]): Card | undefined {
-  for (let i = pile.length - 1; i >= 0; i--) {
-    if (pile[i].rank !== '7') {
-      return pile[i]
-    }
-  }
-  return undefined
-}
-
-function can_play_on(card: Card, pile: Card[]): boolean {
-  // 2 can always be played (resets)
-  if (card.rank === '2') return true
-  // 10 can always be played (burns)
-  if (card.rank === '10') return true
-
-  if (pile.length === 0) return true
-
-  const top = top_card(pile)!
-
-  // If top card is a 7, must play 7 or lower
-  if (top.rank === '7') {
-    return RANK_VALUES[card.rank] <= 7
-  }
-
-  // Otherwise play equal or higher
-  return RANK_VALUES[card.rank] >= RANK_VALUES[top.rank]
 }
 
 function all_same_rank(cards: Card[]): boolean {
@@ -65,9 +31,9 @@ function get_current_player(state: Shithead_state): string {
   return state.player_order[state.current_player_index]
 }
 
-function advance_turn(state: Shithead_state): number {
+function advance_turn(state: Shithead_state, steps = 1): number {
   const len = state.player_order.length
-  return (state.current_player_index + 1) % len
+  return ((state.current_player_index + state.direction * steps) % len + len) % len
 }
 
 function find_card_in_list(cards: Card[], card_id: string): number {
@@ -113,6 +79,7 @@ function clone_state(state: Shithead_state): Shithead_state {
     ),
     player_order: [...state.player_order],
     current_player_index: state.current_player_index,
+    direction: state.direction,
     phase: state.phase,
     ready_players: new Set(state.ready_players),
     last_effect: state.last_effect,
@@ -160,6 +127,7 @@ export const shithead_definition: Card_game_definition<
       players: player_map,
       player_order: players.map((p) => p.id),
       current_player_index: 0,
+      direction: Direction.CLOCKWISE,
       phase: 'swap',
       ready_players: new Set(),
       last_effect: null,
@@ -336,14 +304,34 @@ export const shithead_definition: Card_game_definition<
         next.discard_pile.push(...played_cards)
       }
 
-      // Check for burn (10 or four-of-a-kind)
-      const top = top_card(next.discard_pile)
-      if (top && (top.rank === '10' || check_four_of_a_kind_burn(next.discard_pile))) {
+      // Check for special card effects
+      const played_rank = top_card(next.discard_pile)?.rank
+      const num_played = cmd.card_ids.length
+
+      if (played_rank === '10' || check_four_of_a_kind_burn(next.discard_pile)) {
+        // Burn: clear pile, same player goes again
         next.discard_pile = []
         next.last_effect = 'burn'
-        // Player who burned gets another turn — don't advance
+      } else if (played_rank === 'Q') {
+        // Reverse direction (odd number of Qs flips, even cancels)
+        if (num_played % 2 === 1) {
+          next.direction = next.direction === Direction.CLOCKWISE ? Direction.COUNTER_CLOCKWISE : Direction.CLOCKWISE
+          next.last_effect = 'reverse'
+        } else {
+          next.last_effect = null
+        }
+        // In 2-player with odd Qs, same player goes again
+        if (next.player_order.length === 2 && num_played % 2 === 1) {
+          // Don't advance — acts like skip in 2-player
+        } else {
+          next.current_player_index = advance_turn(next)
+        }
+      } else if (played_rank === '8') {
+        // Skip: advance 1 + num_played (skip N players for N 8s)
+        next.last_effect = 'skip'
+        next.current_player_index = advance_turn(next, 1 + num_played)
       } else {
-        next.last_effect = top?.rank === '7' ? null : null
+        next.last_effect = null
         next.current_player_index = advance_turn(next)
       }
 
@@ -406,6 +394,7 @@ export const shithead_definition: Card_game_definition<
       current_player: get_current_player(state),
       phase: state.phase,
       player_order: [...state.player_order],
+      direction: state.direction,
       last_effect: state.last_effect,
     }
   },

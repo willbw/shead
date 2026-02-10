@@ -9,3 +9,4 @@ export type {
   Visible_own_player_state,
 } from './types'
 export { DEFAULT_SHITHEAD_CONFIG } from './types'
+export { Direction } from '@shead/shared'

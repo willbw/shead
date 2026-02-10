@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Card } from '@shead/shared'
+	import { can_play_on } from '@shead/shared'
 	import { fly } from 'svelte/transition'
 	import { flip } from 'svelte/animate'
 	import CardComponent from './card.svelte'
@@ -9,13 +10,26 @@
 		hand: Card[]
 		face_up: Card[]
 		face_down_count: number
+		discard_pile: Card[]
 		selected_card_ids: string[]
 		phase: 'swap' | 'play' | 'finished'
 		is_current_turn: boolean
 		on_card_click: (card_id: string, source: 'hand' | 'face_up' | 'face_down') => void
 	}
 
-	let { hand, face_up, face_down_count, selected_card_ids, phase, is_current_turn, on_card_click }: Props = $props()
+	let { hand, face_up, face_down_count, discard_pile, selected_card_ids, phase, is_current_turn, on_card_click }: Props = $props()
+
+	const playable_card_ids = $derived.by(() => {
+		if (phase !== 'play') return new Set<string>()
+		const active_source = hand.length > 0 ? hand : face_up.length > 0 ? face_up : []
+		const ids = new Set<string>()
+		for (const card of active_source) {
+			if (can_play_on(card, discard_pile)) {
+				ids.add(card.id)
+			}
+		}
+		return ids
+	})
 
 	const show_hand = $derived(hand.length > 0)
 	const show_face_up = $derived(hand.length === 0 && face_up.length > 0)
@@ -70,6 +84,7 @@
 						<CardComponent
 							{card}
 							selected={selected_card_ids.includes(card.id)}
+							disabled={is_current_turn && !playable_card_ids.has(card.id)}
 							onclick={is_current_turn ? () => on_card_click(card.id, 'hand') : undefined}
 						/>
 					</div>
@@ -89,6 +104,7 @@
 							<CardComponent
 								{card}
 								selected={selected_card_ids.includes(card.id)}
+								disabled={show_face_up && is_current_turn && !playable_card_ids.has(card.id)}
 								onclick={show_face_up && is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
 							/>
 						</div>

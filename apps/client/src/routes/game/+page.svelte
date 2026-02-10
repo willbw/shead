@@ -305,6 +305,7 @@
 					hand={gs.own_state.hand}
 					face_up={gs.own_state.face_up}
 					face_down_count={gs.own_state.face_down_count}
+					discard_pile={gs.discard_pile}
 					selected_card_ids={gs.phase === 'swap' ? (swap_hand_card_id ? [swap_hand_card_id] : []) : game_store.selected_card_ids}
 					phase={gs.phase}
 					is_current_turn={is_my_turn}
