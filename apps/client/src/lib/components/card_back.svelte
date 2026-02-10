@@ -8,11 +8,11 @@
 
 <button
 	aria-label="Face-down card"
-	class="flex h-20 w-14 items-center justify-center rounded-lg border-2 border-blue-800 bg-blue-700 shadow-sm transition-all select-none
+	class="flex items-center justify-center rounded-lg border-2 border-blue-800 bg-blue-700 shadow-sm transition-all select-none
 		{onclick ? 'cursor-pointer hover:bg-blue-600 active:scale-95' : 'cursor-default'}"
-	style="min-width: 44px; min-height: 44px"
+	style="width: var(--card-w); height: var(--card-h); min-width: 40px; min-height: 44px"
 	onclick={onclick}
 	type="button"
 >
-	<div class="h-14 w-9 rounded border border-blue-400 bg-blue-800 opacity-60"></div>
+	<div class="rounded border border-blue-400 bg-blue-800 opacity-60" style="width: 65%; height: 70%"></div>
 </button>

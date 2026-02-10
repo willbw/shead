@@ -13,7 +13,7 @@
 	let { player_name, state, is_current_turn }: Props = $props()
 </script>
 
-<div class="flex flex-col items-center gap-1 rounded-lg border p-2 {is_current_turn ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}">
+<div class="flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors duration-300 {is_current_turn ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}">
 	<div class="flex items-center gap-1">
 		<span class="text-sm font-medium {is_current_turn ? 'text-yellow-700' : 'text-gray-600'}">
 			{player_name}
@@ -27,7 +27,7 @@
 	{#if state.hand_count > 0}
 		<div class="flex items-center gap-1">
 			<span class="text-xs text-gray-400">Hand:</span>
-			<div class="flex -space-x-3">
+			<div class="flex -space-x-2 md:-space-x-3">
 				{#each { length: Math.min(state.hand_count, 6) } as _, i (i)}
 					<CardBack />
 				{/each}

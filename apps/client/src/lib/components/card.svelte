@@ -21,13 +21,13 @@
 </script>
 
 <button
-	class="flex h-20 w-14 flex-col items-center justify-center rounded-lg border-2 bg-white shadow-sm transition-all select-none
+	class="flex flex-col items-center justify-center rounded-lg border-2 bg-white shadow-sm transition-all select-none
 		{selected ? 'border-blue-500 ring-2 ring-blue-300 -translate-y-2' : 'border-gray-300'}
 		{onclick ? 'cursor-pointer hover:border-gray-400 active:scale-95' : 'cursor-default'}"
-	style="min-width: 44px; min-height: 44px"
+	style="width: var(--card-w); height: var(--card-h); min-width: 40px; min-height: 44px"
 	onclick={onclick}
 	type="button"
 >
-	<span class="text-sm font-bold {is_red ? 'text-red-600' : 'text-gray-900'}">{card.rank}</span>
-	<span class="text-lg {is_red ? 'text-red-600' : 'text-gray-900'}">{suit_symbol}</span>
+	<span class="text-sm md:text-base font-bold {is_red ? 'text-red-600' : 'text-gray-900'}">{card.rank}</span>
+	<span class="text-lg md:text-xl {is_red ? 'text-red-600' : 'text-gray-900'}">{suit_symbol}</span>
 </button>

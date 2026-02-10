@@ -3,6 +3,7 @@ import type { Base_command, Validation_result } from './game'
 import type { Create_room_opts } from './lobby'
 
 export interface Server_to_client_events {
+  'session:init': (data: { player_id: string; token: string }) => void
   'game:state': (state: unknown) => void
   'game:error': (error: { message: string }) => void
   'game:over': (scores: Record<string, number>) => void
@@ -12,8 +13,9 @@ export interface Server_to_client_events {
 
 export interface Client_to_server_events {
   'player:set_name': (name: string, ack: (result: { ok: true } | { ok: false; reason: string }) => void) => void
-  'lobby:create': (opts: Create_room_opts, ack: (result: { ok: true; room: Lobby_state } | { ok: false; reason: string }) => void) => void
-  'lobby:join': (room_id: string, ack: (result: { ok: true; room: Lobby_state } | { ok: false; reason: string }) => void) => void
+  'player:reconnect': (token: string, ack: (result: { ok: true; player_id: string; player_name: string; room: Lobby_state | null; game_state: unknown | null } | { ok: false; reason: string }) => void) => void
+  'lobby:create': (opts: Create_room_opts, ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
+  'lobby:join': (room_id: string, ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
   'lobby:leave': (ack: (result: { ok: true } | { ok: false; reason: string }) => void) => void
   'lobby:list': (ack: (rooms: Lobby_state[]) => void) => void
   'lobby:start': (ack: (result: { ok: true } | { ok: false; reason: string }) => void) => void

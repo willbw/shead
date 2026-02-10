@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
-	import { connect, set_name, create_room, join_room, list_rooms } from '$lib/socket'
+	import { connect, set_name, create_room, join_room, list_rooms } from '$lib/socket.svelte'
 
 	let name_input = $state('')
 	let join_code = $state('')
@@ -77,12 +77,6 @@
 		<div class="text-center">
 			<h1 class="text-4xl font-bold text-gray-900">Shithead</h1>
 			<p class="mt-1 text-sm text-gray-500">Multiplayer card game</p>
-		</div>
-
-		<!-- Connection status -->
-		<div class="flex items-center justify-center gap-2">
-			<div class="h-2 w-2 rounded-full {connection_store.connected ? 'bg-green-500' : 'bg-red-500'}"></div>
-			<span class="text-xs text-gray-400">{connection_store.connected ? 'Connected' : 'Connecting...'}</span>
 		</div>
 
 		{#if error}

@@ -3,16 +3,34 @@
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
-	import { connect, leave_room, start_game, send_command } from '$lib/socket'
+	import { connect, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
+	import { fly } from 'svelte/transition'
 	import CardComponent from '$lib/components/card.svelte'
 	import CardBack from '$lib/components/card_back.svelte'
 	import PlayerHand from '$lib/components/player_hand.svelte'
 	import OpponentZone from '$lib/components/opponent_zone.svelte'
 	import GameStatus from '$lib/components/game_status.svelte'
 
-	// Redirect home if no room
+	let copied = $state(false)
+
+	function handle_dismiss_error() {
+		game_store.error_message = null
+	}
+
+	async function copy_room_code() {
+		if (!room) return
+		try {
+			await navigator.clipboard.writeText(room.room_id)
+			copied = true
+			setTimeout(() => { copied = false }, 2000)
+		} catch {
+			// fallback: already select-all on the text
+		}
+	}
+
+	// Redirect home if no room (but wait for reconnection attempt first)
 	$effect(() => {
-		if (connection_store.connected && !lobby_store.room) {
+		if (connection_store.connected && !lobby_store.room && !reconnecting.value) {
 			goto('/')
 		}
 	})
@@ -147,7 +165,15 @@
 			<h1 class="text-2xl font-bold">Waiting Room</h1>
 			<div class="rounded-lg bg-green-800 p-4">
 				<p class="mb-2 text-sm text-green-300">Room Code:</p>
-				<p class="font-mono text-lg font-bold select-all">{room.room_id}</p>
+				<div class="flex items-center gap-2">
+					<p class="font-mono text-lg font-bold select-all">{room.room_id}</p>
+					<button
+						onclick={copy_room_code}
+						class="rounded bg-green-700 px-2 py-1 text-xs font-medium hover:bg-green-600 transition-colors"
+					>
+						{copied ? 'Copied!' : 'Copy'}
+					</button>
+				</div>
 			</div>
 
 			<div class="w-full max-w-sm">
@@ -204,6 +230,7 @@
 					is_my_turn={is_my_turn}
 					last_effect={gs.last_effect}
 					error_message={game_store.error_message}
+					on_dismiss_error={handle_dismiss_error}
 				/>
 
 				<div class="flex items-center gap-6">
@@ -214,20 +241,24 @@
 							<CardBack />
 							<span class="text-xs text-green-400">{gs.deck_count}</span>
 						{:else}
-							<div class="flex h-20 w-14 items-center justify-center rounded-lg border-2 border-dashed border-green-700">
+							<div class="flex items-center justify-center rounded-lg border-2 border-dashed border-green-700" style="width: var(--card-w); height: var(--card-h)">
 								<span class="text-xs text-green-600">Empty</span>
 							</div>
 						{/if}
 					</div>
 
 					<!-- Discard Pile -->
-					<div class="flex flex-col items-center gap-1">
+					<div class="flex flex-col items-center gap-1 {gs.last_effect === 'burn' ? 'animate-burn' : ''}">
 						<span class="text-xs text-green-300">Pile</span>
 						{#if pile_top}
-							<CardComponent card={pile_top} />
+							{#key pile_top.id}
+								<div in:fly={{ y: -20, duration: 200 }}>
+									<CardComponent card={pile_top} />
+								</div>
+							{/key}
 							<span class="text-xs text-green-400">{gs.discard_pile.length}</span>
 						{:else}
-							<div class="flex h-20 w-14 items-center justify-center rounded-lg border-2 border-dashed border-green-700">
+							<div class="flex items-center justify-center rounded-lg border-2 border-dashed border-green-700" style="width: var(--card-w); height: var(--card-h)">
 								<span class="text-xs text-green-600">Empty</span>
 							</div>
 						{/if}

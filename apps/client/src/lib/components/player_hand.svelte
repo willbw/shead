@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Card } from '@shead/shared'
+	import { fly } from 'svelte/transition'
+	import { flip } from 'svelte/animate'
 	import CardComponent from './card.svelte'
 	import CardBack from './card_back.svelte'
 
@@ -27,11 +29,13 @@
 			<span class="text-xs text-gray-400 uppercase">Hand</span>
 			<div class="flex flex-wrap justify-center gap-1">
 				{#each hand as card (card.id)}
-					<CardComponent
-						{card}
-						selected={selected_card_ids.includes(card.id)}
-						onclick={() => on_card_click(card.id, 'hand')}
-					/>
+					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+						<CardComponent
+							{card}
+							selected={selected_card_ids.includes(card.id)}
+							onclick={() => on_card_click(card.id, 'hand')}
+						/>
+					</div>
 				{/each}
 			</div>
 		</div>
@@ -39,11 +43,13 @@
 			<span class="text-xs text-gray-400 uppercase">Face Up</span>
 			<div class="flex flex-wrap justify-center gap-1">
 				{#each face_up as card (card.id)}
-					<CardComponent
-						{card}
-						selected={selected_card_ids.includes(card.id)}
-						onclick={() => on_card_click(card.id, 'face_up')}
-					/>
+					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+						<CardComponent
+							{card}
+							selected={selected_card_ids.includes(card.id)}
+							onclick={() => on_card_click(card.id, 'face_up')}
+						/>
+					</div>
 				{/each}
 			</div>
 		</div>
@@ -60,11 +66,13 @@
 		{#if show_hand}
 			<div class="flex flex-wrap justify-center gap-1">
 				{#each hand as card (card.id)}
-					<CardComponent
-						{card}
-						selected={selected_card_ids.includes(card.id)}
-						onclick={is_current_turn ? () => on_card_click(card.id, 'hand') : undefined}
-					/>
+					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+						<CardComponent
+							{card}
+							selected={selected_card_ids.includes(card.id)}
+							onclick={is_current_turn ? () => on_card_click(card.id, 'hand') : undefined}
+						/>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -77,11 +85,13 @@
 				{/if}
 				<div class="flex flex-wrap justify-center gap-1">
 					{#each face_up as card (card.id)}
-						<CardComponent
-							{card}
-							selected={selected_card_ids.includes(card.id)}
-							onclick={show_face_up && is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
-						/>
+						<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+							<CardComponent
+								{card}
+								selected={selected_card_ids.includes(card.id)}
+								onclick={show_face_up && is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
+							/>
+						</div>
 					{/each}
 				</div>
 			</div>
