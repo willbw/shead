@@ -10,6 +10,8 @@ import type {
 } from '@shead/shared'
 import { Room_manager } from '@shead/game-engine'
 import type { Game_room } from '@shead/game-engine'
+import { create_deck } from '@shead/shared'
+import type { Shithead_state } from '@shead/games'
 
 type Typed_server = Server<Client_to_server_events, Server_to_client_events>
 type Typed_socket = Socket<Client_to_server_events, Server_to_client_events>
@@ -372,6 +374,46 @@ export function create_socket_server(
         broadcast_game_state(room)
       }
     })
+
+    // Debug: skip to face-down phase for the calling player
+    socket.on('debug:face_down_test' as any, (ack: any) => {
+      const s = socket_sessions.get(socket.id)
+      if (!s || !s.room_id) { ack?.({ ok: false }); return }
+
+      const room = room_manager.get_room(s.room_id) as Game_room<Shithead_state, any, any> | undefined
+      if (!room) { ack?.({ ok: false }); return }
+
+      const state = room._debug_get_state()
+      if (!state) { ack?.({ ok: false }); return }
+
+      // Build some known cards for face-up/face-down
+      const deck = create_deck()
+      const card_pool = [...deck]
+
+      for (const [pid, ps] of state.players) {
+        // Collect all this player's cards back, we'll reassign
+        ps.hand = []
+        if (pid === s.player_id) {
+          // Calling player: face_up with playable cards, face_down with mix
+          ps.face_up = card_pool.splice(0, 3)
+          ps.face_down = card_pool.splice(0, 3)
+        } else {
+          // Opponent: give them a hand so they can play normally
+          ps.face_up = []
+          ps.face_down = []
+          ps.hand = card_pool.splice(0, 5)
+        }
+      }
+
+      state.deck = []
+      state.discard_pile = [card_pool.splice(0, 1)[0]]
+      state.phase = 'play'
+      state.ready_players = new Set(state.player_order)
+
+      room._debug_set_state(state)
+      broadcast_game_state(room)
+      ack?.({ ok: true })
+    })
   }
 
   // After reconnect, socket already has the old handlers from initial connection.
@@ -385,6 +427,7 @@ export function create_socket_server(
     socket.removeAllListeners('lobby:leave')
     socket.removeAllListeners('lobby:start')
     socket.removeAllListeners('game:command')
+    socket.removeAllListeners('debug:face_down_test')
     setup_session_handlers(socket, session)
   }
 

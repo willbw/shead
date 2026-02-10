@@ -103,6 +103,16 @@ export class Game_room<
     return { valid: true }
   }
 
+  /** Debug only — replace internal state directly */
+  _debug_set_state(state: T_state): void {
+    this.state = state
+    this.emit({ type: 'state_changed' })
+  }
+
+  _debug_get_state(): T_state | null {
+    return this.state
+  }
+
   get_state_for_player(player_id: string): unknown {
     if (this.state === null) {
       return null

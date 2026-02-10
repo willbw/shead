@@ -27,7 +27,7 @@ export let reconnecting = $state({ value: false })
 // --- Wire socket events to stores (browser only) ---
 
 if (browser) {
-  // Debug helper — run shead_debug() in browser console
+  // Debug helpers — run from browser console
   ;(window as any).shead_debug = () => {
     const gs = game_store.game_state
     console.table({
@@ -41,6 +41,13 @@ if (browser) {
       am_in_ready_list: gs ? gs.ready_players.includes(connection_store.player_id) : 'no game state',
       phase: gs?.phase ?? 'no game state',
       current_player: gs?.current_player ?? 'no game state',
+    })
+  }
+
+  // Skip to face-down test state — call after starting a game
+  ;(window as any).shead_face_down_test = () => {
+    socket.emit('debug:face_down_test' as any, (result: any) => {
+      console.log('face_down_test:', result)
     })
   }
 
