@@ -44,10 +44,15 @@ export function create_deck_with_jokers(count: number): Game_card[] {
   return cards
 }
 
+// Available globally in Node 19+ and all modern browsers
+declare const crypto: { getRandomValues<T extends ArrayBufferView>(array: T): T }
+
 export function shuffle<T>(array: T[]): T[] {
   const result = [...array]
+  const random_bytes = new Uint32Array(result.length)
+  crypto.getRandomValues(random_bytes)
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = random_bytes[i] % (i + 1);
     [result[i], result[j]] = [result[j], result[i]]
   }
   return result
@@ -56,6 +61,10 @@ export function shuffle<T>(array: T[]): T[] {
 export const RANK_VALUES: Record<Rank, number> = {
   '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
   '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+}
+
+export function sort_cards(cards: Card[]): Card[] {
+  return [...cards].sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
 }
 
 export const ODD_RANK_VALUES = new Set([3, 5, 7, 9])

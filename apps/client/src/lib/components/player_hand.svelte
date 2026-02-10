@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Card } from '@shead/shared'
-	import { can_play_on } from '@shead/shared'
+	import { can_play_on, sort_cards } from '@shead/shared'
 	import { fly } from 'svelte/transition'
 	import { flip } from 'svelte/animate'
 	import CardComponent from './card.svelte'
@@ -18,6 +18,19 @@
 	}
 
 	let { hand, face_up, face_down_count, discard_pile, selected_card_ids, phase, is_current_turn, on_card_click }: Props = $props()
+
+	const sorted_hand = $derived(sort_cards(hand))
+
+	/** Set of card IDs that are not the first of their rank group (should overlap). */
+	const overlap_ids = $derived.by(() => {
+		const ids = new Set<string>()
+		for (let i = 1; i < sorted_hand.length; i++) {
+			if (sorted_hand[i].rank === sorted_hand[i - 1].rank) {
+				ids.add(sorted_hand[i].id)
+			}
+		}
+		return ids
+	})
 
 	const playable_card_ids = $derived.by(() => {
 		if (phase !== 'play') return new Set<string>()
@@ -41,9 +54,13 @@
 		<!-- Swap phase: show both hand and face-up for swapping -->
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-xs text-gray-400 uppercase">Hand</span>
-			<div class="flex flex-wrap justify-center gap-1">
-				{#each hand as card (card.id)}
-					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+			<div class="flex flex-wrap justify-center">
+				{#each sorted_hand as card (card.id)}
+					<div
+						class="{overlap_ids.has(card.id) ? '-ml-[calc(var(--card-w)*0.55)]' : 'ml-1'} first:ml-0"
+						transition:fly={{ y: 30, duration: 200 }}
+						animate:flip={{ duration: 200 }}
+					>
 						<CardComponent
 							{card}
 							selected={selected_card_ids.includes(card.id)}
@@ -78,9 +95,13 @@
 	{:else}
 		<!-- Play phase: show the active card source -->
 		{#if show_hand}
-			<div class="flex flex-wrap justify-center gap-1">
-				{#each hand as card (card.id)}
-					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
+			<div class="flex flex-wrap justify-center">
+				{#each sorted_hand as card (card.id)}
+					<div
+						class="{overlap_ids.has(card.id) ? '-ml-[calc(var(--card-w)*0.55)]' : 'ml-1'} first:ml-0"
+						transition:fly={{ y: 30, duration: 200 }}
+						animate:flip={{ duration: 200 }}
+					>
 						<CardComponent
 							{card}
 							selected={selected_card_ids.includes(card.id)}
