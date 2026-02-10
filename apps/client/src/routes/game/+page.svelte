@@ -226,7 +226,7 @@
 				</button>
 			</div>
 		</div>
-	{:else if gs && gs.phase !== 'finished'}
+	{:else if gs}
 		<!-- Game Table -->
 		<div class="flex flex-1 flex-col">
 			<!-- Top: Opponents -->
@@ -244,14 +244,16 @@
 
 			<!-- Center: Game Status + Pile + Deck -->
 			<div class="flex flex-1 flex-col items-center justify-center gap-3">
-				<GameStatus
-					phase={gs.phase}
-					current_player_name={current_player_name()}
-					is_my_turn={is_my_turn}
-					last_effect={gs.last_effect}
-					error_message={game_store.error_message}
-					on_dismiss_error={handle_dismiss_error}
-				/>
+				{#if gs.phase !== 'finished'}
+					<GameStatus
+						phase={gs.phase}
+						current_player_name={current_player_name()}
+						is_my_turn={is_my_turn}
+						last_effect={gs.last_effect}
+						error_message={game_store.error_message}
+						on_dismiss_error={handle_dismiss_error}
+					/>
+				{/if}
 
 				<div class="flex items-center gap-6">
 					<!-- Deck -->
@@ -293,16 +295,40 @@
 				</div>
 
 				<!-- Reveal Overlay -->
-			{#if revealing && gs.last_revealed_card}
-				<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-					<div class="animate-reveal-card">
-						<CardComponent card={gs.last_revealed_card} />
+				{#if revealing && gs.last_revealed_card}
+					<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+						<div class="animate-reveal-card">
+							<CardComponent card={gs.last_revealed_card} />
+						</div>
 					</div>
-				</div>
-			{/if}
+				{/if}
 
-			<!-- Action Buttons -->
-				{#if gs.phase === 'swap'}
+				<!-- Action Buttons / Game Over -->
+				{#if gs.phase === 'finished'}
+					<div class="flex flex-col items-center gap-3">
+						<h1 class="text-2xl font-bold">Game Over!</h1>
+						{#if game_store.scores}
+							<div class="w-full max-w-xs rounded-lg bg-green-800 p-3">
+								<div class="space-y-1">
+									{#each Object.entries(game_store.scores).sort((a, b) => b[1] - a[1]) as [player_id, score] (player_id)}
+										<div class="flex items-center justify-between rounded bg-green-700 px-3 py-1.5">
+											<span class="text-sm">{get_player_name(player_id)}</span>
+											<span class="text-sm font-bold {score === 0 ? 'text-red-400' : 'text-green-300'}">
+												{score === 0 ? 'Shithead!' : 'Winner'}
+											</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						<button
+							onclick={handle_leave}
+							class="rounded bg-blue-600 px-6 py-2 text-sm font-medium hover:bg-blue-500"
+						>
+							Back to Lobby
+						</button>
+					</div>
+				{:else if gs.phase === 'swap'}
 					<div class="flex gap-2">
 						{#if swap_hand_card_id}
 							<p class="text-sm text-yellow-300">Now tap a face-up card to swap</p>
@@ -353,34 +379,6 @@
 					on_card_click={gs.phase === 'swap' ? handle_swap_card_click : handle_play_card_click}
 				/>
 			</div>
-		</div>
-	{:else if gs && gs.phase === 'finished'}
-		<!-- Game Over -->
-		<div class="flex flex-1 flex-col items-center justify-center gap-6 p-4">
-			<h1 class="text-3xl font-bold">Game Over!</h1>
-
-			{#if game_store.scores}
-				<div class="w-full max-w-sm rounded-lg bg-green-800 p-4">
-					<h2 class="mb-3 text-center text-sm font-medium text-green-300">Scores</h2>
-					<div class="space-y-2">
-						{#each Object.entries(game_store.scores).sort((a, b) => b[1] - a[1]) as [player_id, score] (player_id)}
-							<div class="flex items-center justify-between rounded bg-green-700 px-3 py-2">
-								<span class="text-sm">{get_player_name(player_id)}</span>
-								<span class="text-sm font-bold {score === 0 ? 'text-red-400' : 'text-green-300'}">
-									{score === 0 ? 'Shithead!' : score}
-								</span>
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
-
-			<button
-				onclick={handle_leave}
-				class="rounded bg-blue-600 px-6 py-2 text-sm font-medium hover:bg-blue-500"
-			>
-				Back to Lobby
-			</button>
 		</div>
 	{:else}
 		<!-- Game started but no state yet -->
