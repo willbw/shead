@@ -47,12 +47,21 @@ export function create_deck_with_jokers(count: number): Game_card[] {
 // Available globally in Node 19+ and all modern browsers
 declare const crypto: { getRandomValues<T extends ArrayBufferView>(array: T): T }
 
+/** Return a uniform random integer in [0, upper_bound) with no modulo bias. */
+function random_below(upper_bound: number): number {
+  const max = 0x100000000 // 2^32
+  const limit = max - (max % upper_bound) // largest multiple of upper_bound ≤ 2^32
+  const buf = new Uint32Array(1)
+  for (;;) {
+    crypto.getRandomValues(buf)
+    if (buf[0] < limit) return buf[0] % upper_bound
+  }
+}
+
 export function shuffle<T>(array: T[]): T[] {
   const result = [...array]
-  const random_bytes = new Uint32Array(result.length)
-  crypto.getRandomValues(random_bytes)
   for (let i = result.length - 1; i > 0; i--) {
-    const j = random_bytes[i] % (i + 1);
+    const j = random_below(i + 1);
     [result[i], result[j]] = [result[j], result[i]]
   }
   return result
