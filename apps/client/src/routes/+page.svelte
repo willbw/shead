@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { connection_store } from '$lib/stores/connection.svelte'
-	import { lobby_store } from '$lib/stores/lobby.svelte'
-	import { connect, set_name, create_room, join_room, list_rooms } from '$lib/socket.svelte'
+	import { connect, create_room } from '$lib/socket.svelte'
 
-	let name_input = $state('')
-	let join_code = $state('')
 	let error = $state('')
 	let loading = $state(false)
+	let join_code = $state('')
+
+	function handle_join() {
+		const code = join_code.trim()
+		if (!code) return
+		goto('/' + code)
+	}
 
 	$effect(() => {
 		if (!connection_store.connected) {
@@ -15,55 +19,12 @@
 		}
 	})
 
-	// Poll rooms while on this page
-	let rooms_interval: ReturnType<typeof setInterval> | undefined
-	$effect(() => {
-		if (connection_store.connected) {
-			list_rooms()
-			rooms_interval = setInterval(() => list_rooms(), 3000)
-		}
-		return () => {
-			if (rooms_interval) clearInterval(rooms_interval)
-		}
-	})
-
-	async function handle_set_name() {
-		if (!name_input.trim()) return
-		error = ''
-		try {
-			await set_name(name_input.trim())
-		} catch (e) {
-			error = (e as Error).message
-		}
-	}
-
 	async function handle_create() {
 		error = ''
 		loading = true
 		try {
-			if (!connection_store.player_name) {
-				await set_name(name_input.trim() || `Player-${connection_store.player_id.slice(0, 4)}`)
-			}
-			await create_room()
-			goto('/game')
-		} catch (e) {
-			error = (e as Error).message
-		} finally {
-			loading = false
-		}
-	}
-
-	async function handle_join(room_id?: string) {
-		const id = room_id ?? join_code.trim()
-		if (!id) return
-		error = ''
-		loading = true
-		try {
-			if (!connection_store.player_name) {
-				await set_name(name_input.trim() || `Player-${connection_store.player_id.slice(0, 4)}`)
-			}
-			await join_room(id)
-			goto('/game')
+			const room = await create_room()
+			goto('/' + room.room_id)
 		} catch (e) {
 			error = (e as Error).message
 		} finally {
@@ -83,40 +44,13 @@
 			<div class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
 		{/if}
 
-		<!-- Name input -->
-		<div class="rounded-lg bg-white p-4 shadow-sm">
-			<label for="name" class="block text-sm font-medium text-gray-700">Your Name</label>
-			<div class="mt-1 flex gap-2">
-				<input
-					id="name"
-					type="text"
-					bind:value={name_input}
-					placeholder="Enter your name"
-					maxlength={20}
-					class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-					onkeydown={(e) => { if (e.key === 'Enter') handle_set_name() }}
-				/>
-				<button
-					onclick={handle_set_name}
-					disabled={!connection_store.connected || !name_input.trim()}
-					class="rounded bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-				>
-					Set
-				</button>
-			</div>
-			{#if connection_store.player_name}
-				<p class="mt-1 text-xs text-green-600">Playing as: {connection_store.player_name}</p>
-			{/if}
-		</div>
-
-		<!-- Create / Join -->
 		<div class="rounded-lg bg-white p-4 shadow-sm space-y-3">
 			<button
 				onclick={handle_create}
 				disabled={!connection_store.connected || loading}
 				class="w-full rounded bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
-				{loading ? 'Loading...' : 'Create Game'}
+				{loading ? 'Creating...' : 'Create Game'}
 			</button>
 
 			<div class="flex items-center gap-2">
@@ -130,41 +64,18 @@
 					type="text"
 					bind:value={join_code}
 					placeholder="Room code"
+					maxlength={6}
 					class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
 					onkeydown={(e) => { if (e.key === 'Enter') handle_join() }}
 				/>
 				<button
-					onclick={() => handle_join()}
-					disabled={!connection_store.connected || !join_code.trim() || loading}
+					onclick={handle_join}
+					disabled={!join_code.trim()}
 					class="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Join
 				</button>
 			</div>
 		</div>
-
-		<!-- Room List -->
-		{#if lobby_store.rooms.length > 0}
-			<div class="rounded-lg bg-white p-4 shadow-sm">
-				<h2 class="text-sm font-medium text-gray-700 mb-2">Open Rooms</h2>
-				<div class="space-y-2">
-					{#each lobby_store.rooms.filter(r => r.status === 'waiting') as room (room.room_id)}
-						<div class="flex items-center justify-between rounded border border-gray-200 px-3 py-2">
-							<div>
-								<span class="text-sm font-medium text-gray-800">{room.room_id.slice(0, 8)}</span>
-								<span class="ml-2 text-xs text-gray-400">{room.players.length} player{room.players.length !== 1 ? 's' : ''}</span>
-							</div>
-							<button
-								onclick={() => handle_join(room.room_id)}
-								disabled={!connection_store.connected || loading}
-								class="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-500 disabled:opacity-50"
-							>
-								Join
-							</button>
-						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
 	</div>
 </div>

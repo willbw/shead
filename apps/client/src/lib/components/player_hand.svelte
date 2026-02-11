@@ -34,9 +34,10 @@
 
 	const playable_card_ids = $derived.by(() => {
 		if (phase !== 'play') return new Set<string>()
-		const active_source = hand.length > 0 ? hand : face_up.length > 0 ? face_up : []
+		// Cards can be played from hand and face_up together
+		const available = hand.length > 0 ? [...hand, ...face_up] : face_up.length > 0 ? face_up : []
 		const ids = new Set<string>()
-		for (const card of active_source) {
+		for (const card of available) {
 			if (can_play_on(card, discard_pile)) {
 				ids.add(card.id)
 			}
@@ -45,7 +46,7 @@
 	})
 
 	const show_hand = $derived(hand.length > 0)
-	const show_face_up = $derived(hand.length === 0 && face_up.length > 0)
+	const show_face_up_active = $derived(hand.length === 0 && face_up.length > 0)
 	const show_face_down = $derived(hand.length === 0 && face_up.length === 0 && face_down_count > 0)
 </script>
 
@@ -113,7 +114,7 @@
 			</div>
 		{/if}
 
-		<!-- Face-up: show below hand, or as active source when hand is empty -->
+		<!-- Face-up: show below hand, clickable when playable -->
 		{#if face_up.length > 0}
 			<div class="flex flex-col items-center gap-1">
 				{#if hand.length > 0}
@@ -125,8 +126,8 @@
 							<CardComponent
 								{card}
 								selected={selected_card_ids.includes(card.id)}
-								disabled={show_face_up && is_current_turn && !playable_card_ids.has(card.id)}
-								onclick={show_face_up && is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
+								disabled={is_current_turn && !playable_card_ids.has(card.id)}
+								onclick={is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
 							/>
 						</div>
 					{/each}

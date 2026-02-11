@@ -224,14 +224,17 @@ export const shithead_definition: Card_game_definition<
       }
 
       const source = get_playable_source(player_state)
-      const source_cards = source === 'hand' ? player_state.hand : player_state.face_up
+      if (source === 'face_down') {
+        return { valid: false, reason: 'Must use PLAY_FACE_DOWN when only face-down cards remain' }
+      }
 
-      // Validate all cards exist in the source
+      // Cards can come from hand and/or face_up (but not face_down)
+      const available = [...player_state.hand, ...player_state.face_up]
       const cards: Card[] = []
       for (const card_id of cmd.card_ids) {
-        const card = source_cards.find((c) => c.id === card_id)
+        const card = available.find((c) => c.id === card_id)
         if (!card) {
-          return { valid: false, reason: `Card ${card_id} not found in ${source}` }
+          return { valid: false, reason: `Card ${card_id} not found in hand or face-up` }
         }
         cards.push(card)
       }
@@ -341,22 +344,22 @@ export const shithead_definition: Card_game_definition<
 
     if (cmd.type === 'PLAY_CARD') {
       const ps = next.players.get(cmd.player_id)!
-      const source = get_playable_source(ps)
-      const source_cards = source === 'hand' ? ps.hand : ps.face_up
       const played_cards: Card[] = []
-      let remaining = [...source_cards]
 
+      // Remove each card from whichever source it belongs to
       for (const card_id of cmd.card_ids) {
-        const result = remove_card(remaining, card_id)!
-        played_cards.push(result.card)
-        remaining = result.remaining
+        const hand_result = remove_card(ps.hand, card_id)
+        if (hand_result) {
+          played_cards.push(hand_result.card)
+          ps.hand = hand_result.remaining
+        } else {
+          const face_up_result = remove_card(ps.face_up, card_id)!
+          played_cards.push(face_up_result.card)
+          ps.face_up = face_up_result.remaining
+        }
       }
 
-      if (source === 'hand') {
-        ps.hand = remaining
-      } else {
-        ps.face_up = remaining
-      }
+      const played_from_hand = ps.hand.length < (state.players.get(cmd.player_id)!.hand.length)
 
       next.discard_pile.push(...played_cards)
 
@@ -388,7 +391,7 @@ export const shithead_definition: Card_game_definition<
 
       // Draw back up to minimum hand size if below it
       const min_hand = DEFAULT_SHITHEAD_CONFIG.num_hand
-      if (source === 'hand' && next.deck.length > 0 && ps.hand.length < min_hand) {
+      if (played_from_hand && next.deck.length > 0 && ps.hand.length < min_hand) {
         const deficit = min_hand - ps.hand.length
         const { drawn, remaining } = draw_cards(next.deck, deficit)
         ps.hand = [...ps.hand, ...drawn]

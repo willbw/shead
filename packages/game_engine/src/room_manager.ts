@@ -5,7 +5,17 @@ import { Game_room } from './game_room'
 export class Room_manager {
   private rooms: Map<string, Game_room<unknown, Base_command, unknown>> = new Map()
   private definitions: Map<string, Card_game_definition<unknown, Base_command, unknown>> = new Map()
-  private next_id = 1
+
+  private generate_room_id(): string {
+    const letters = 'abcdefghijklmnopqrstuvwxyz'
+    const digits = '0123456789'
+    for (;;) {
+      let id = ''
+      for (let i = 0; i < 3; i++) id += letters[Math.floor(Math.random() * 26)]
+      for (let i = 0; i < 3; i++) id += digits[Math.floor(Math.random() * 10)]
+      if (!this.rooms.has(id)) return id
+    }
+  }
 
   register_game(definition: Card_game_definition<unknown, Base_command, unknown>): void {
     this.definitions.set(definition.id, definition)
@@ -16,7 +26,7 @@ export class Room_manager {
     if (!definition) {
       return null
     }
-    const room_id = `room-${this.next_id++}`
+    const room_id = this.generate_room_id()
     const room = new Game_room(room_id, definition, config)
     this.rooms.set(room_id, room)
     return room
