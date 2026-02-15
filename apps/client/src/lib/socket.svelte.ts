@@ -237,6 +237,11 @@ export function start_game(): Promise<void> {
 
 export function practice_vs_bot(): Promise<Lobby_state> {
   return new Promise((resolve, reject) => {
+    // Clear stale state from any previous game
+    game_store.game_state = null
+    game_store.selected_card_ids = []
+    game_store.scores = null
+    game_store.error_message = null
     socket.emit('lobby:practice', (result) => {
       if (result.ok) {
         lobby_store.room = result.room

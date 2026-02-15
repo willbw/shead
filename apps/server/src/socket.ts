@@ -364,9 +364,22 @@ export function create_socket_server(
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
+      // Auto-leave previous room (e.g. finished game)
       if (s.room_id) {
-        ack({ ok: false, reason: 'Already in a room' })
-        return
+        const old_room = room_manager.get_room(s.room_id)
+        if (old_room) {
+          old_room.remove_player(s.player_id)
+          socket.leave(old_room.id)
+          if (old_room.get_player_count() === 0) {
+            const bc = bot_controllers.get(old_room.id)
+            if (bc) {
+              bc.destroy()
+              bot_controllers.delete(old_room.id)
+            }
+            room_manager.destroy_room(old_room.id)
+          }
+        }
+        s.room_id = null
       }
 
       const room = room_manager.create_room('shithead', {})
