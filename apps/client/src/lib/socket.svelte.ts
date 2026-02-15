@@ -235,14 +235,14 @@ export function start_game(): Promise<void> {
   })
 }
 
-export function practice_vs_bot(difficulty: 'easy' | 'medium' | 'hard' = 'easy'): Promise<Lobby_state> {
+export function practice_vs_bot(difficulty: 'easy' | 'medium' | 'hard' = 'easy', bot_count: number = 1): Promise<Lobby_state> {
   return new Promise((resolve, reject) => {
     // Clear stale state from any previous game
     game_store.game_state = null
     game_store.selected_card_ids = []
     game_store.scores = null
     game_store.error_message = null
-    socket.emit('lobby:practice', difficulty, (result) => {
+    socket.emit('lobby:practice', difficulty, bot_count, (result) => {
       if (result.ok) {
         lobby_store.room = result.room
         sessionStorage.setItem(TOKEN_KEY, result.player_token)

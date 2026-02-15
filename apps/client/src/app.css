@@ -1,14 +1,18 @@
 @import 'tailwindcss';
 
 :root {
-  --card-w: 3.5rem;
-  --card-h: 5rem;
+  --card-w: 2.5rem;
+  --card-h: 3.5rem;
+  --card-w-sm: 1.75rem;
+  --card-h-sm: 2.5rem;
 }
 
 @media (min-width: 768px) {
   :root {
-    --card-w: 4rem;
-    --card-h: 5.75rem;
+    --card-w: 3.5rem;
+    --card-h: 5rem;
+    --card-w-sm: 2.25rem;
+    --card-h-sm: 3.25rem;
   }
 }
 
@@ -18,6 +22,31 @@
     --card-h: 6.5rem;
   }
 }
+
+.game-table {
+  display: grid;
+  grid-template-areas:
+    ".      north   ."
+    "west   center  east"
+    "south  south   south"
+    "actions actions actions";
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-columns: 1fr minmax(0, 2fr) 1fr;
+  min-height: 100dvh;
+}
+
+@media (min-width: 768px) {
+  .game-table {
+    grid-template-columns: auto 1fr auto;
+  }
+}
+
+.area-north  { grid-area: north; }
+.area-west   { grid-area: west; }
+.area-center { grid-area: center; }
+.area-east   { grid-area: east; }
+.area-south   { grid-area: south; }
+.area-actions { grid-area: actions; }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }

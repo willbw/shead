@@ -7,6 +7,7 @@
 	let error = $state('')
 	let loading = $state(false)
 	let practice_loading = $state<string | false>(false)
+	const is_practice_loading = $derived(!!practice_loading)
 	let join_code = $state('')
 
 	function handle_join() {
@@ -34,14 +35,14 @@
 		}
 	}
 
-	async function handle_practice(difficulty: 'easy' | 'medium' | 'hard') {
+	async function handle_practice(difficulty: 'easy' | 'medium' | 'hard', bot_count: number = 1) {
 		error = ''
-		practice_loading = difficulty
+		practice_loading = `${difficulty}-${bot_count}`
 		try {
 			if (!connection_store.player_name || connection_store.player_name.startsWith('Player-')) {
 				await set_name('Player')
 			}
-			const room = await practice_vs_bot(difficulty)
+			const room = await practice_vs_bot(difficulty, bot_count)
 			goto('/' + room.room_id)
 		} catch (e) {
 			error = (e as Error).message
@@ -84,28 +85,55 @@
 
 		<div class="rounded-lg bg-white p-4 shadow-sm space-y-3">
 			<p class="text-center text-sm font-medium text-gray-700">Practice vs Bot</p>
-			<div class="flex gap-2">
-				<button
-					onclick={() => handle_practice('easy')}
-					disabled={!connection_store.connected || !!practice_loading}
-					class="flex-1 rounded bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-				>
-					{practice_loading === 'easy' ? 'Starting...' : 'Easy'}
-				</button>
-				<button
-					onclick={() => handle_practice('medium')}
-					disabled={!connection_store.connected || !!practice_loading}
-					class="flex-1 rounded bg-yellow-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
-				>
-					{practice_loading === 'medium' ? 'Starting...' : 'Medium'}
-				</button>
-				<button
-					onclick={() => handle_practice('hard')}
-					disabled={!connection_store.connected || !!practice_loading}
-					class="flex-1 rounded bg-red-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-				>
-					{practice_loading === 'hard' ? 'Starting...' : 'Hard'}
-				</button>
+			<div class="space-y-2">
+				<p class="text-xs text-gray-400 text-center">1v1</p>
+				<div class="flex gap-2">
+					<button
+						onclick={() => handle_practice('easy')}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'easy-1' ? 'Starting...' : 'Easy'}
+					</button>
+					<button
+						onclick={() => handle_practice('medium')}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-yellow-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'medium-1' ? 'Starting...' : 'Medium'}
+					</button>
+					<button
+						onclick={() => handle_practice('hard')}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-red-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'hard-1' ? 'Starting...' : 'Hard'}
+					</button>
+				</div>
+				<p class="text-xs text-gray-400 text-center">4-Player</p>
+				<div class="flex gap-2">
+					<button
+						onclick={() => handle_practice('easy', 3)}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'easy-3' ? 'Starting...' : 'Easy'}
+					</button>
+					<button
+						onclick={() => handle_practice('medium', 3)}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-yellow-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'medium-3' ? 'Starting...' : 'Medium'}
+					</button>
+					<button
+						onclick={() => handle_practice('hard', 3)}
+						disabled={!connection_store.connected || is_practice_loading}
+						class="flex-1 rounded bg-red-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{practice_loading === 'hard-3' ? 'Starting...' : 'Hard'}
+					</button>
+				</div>
 			</div>
 
 			<div class="flex items-center gap-2">

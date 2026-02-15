@@ -156,6 +156,14 @@
 			.filter(o => o.state)
 	})
 
+	// Clockwise from south (you): S → W → N → E
+	const positioned = $derived.by(() => {
+		const opps = opponents()
+		if (opps.length === 1) return { north: opps[0], east: null, west: null }
+		if (opps.length === 2) return { north: opps[1], west: opps[0], east: null }
+		return { north: opps[1], east: opps[2], west: opps[0] }
+	})
+
 	function get_player_name(id: string): string {
 		return room?.players.find(p => p.id === id)?.name ?? id.slice(0, 6)
 	}
@@ -379,23 +387,37 @@
 				</div>
 			</div>
 		{:else if gs}
-			<!-- Game Table -->
-			<div class="flex flex-1 flex-col">
-				<!-- Top: Opponents -->
-				<div class="flex flex-wrap justify-center gap-2 p-2">
-					{#each opponents() as opp (opp.id)}
+			<!-- Game Table (CSS Grid) -->
+			<div class="game-table bg-green-900">
+				<!-- North: primary opponent -->
+				<div class="area-north flex justify-center p-2">
+					{#if positioned.north}
 						<OpponentZone
-							player_id={opp.id}
-							player_name={opp.name}
-							state={opp.state}
-							is_current_turn={gs.current_player === opp.id}
-							ready={gs.phase === 'swap' && gs.ready_players.includes(opp.id)}
+							player_id={positioned.north.id}
+							player_name={positioned.north.name}
+							state={positioned.north.state}
+							is_current_turn={gs.current_player === positioned.north.id}
+							ready={gs.phase === 'swap' && gs.ready_players.includes(positioned.north.id)}
 						/>
-					{/each}
+					{/if}
 				</div>
 
-				<!-- Center: Game Status + Pile + Deck -->
-				<div class="flex flex-1 flex-col items-center justify-center gap-3">
+				<!-- West: side opponent (compact) -->
+				<div class="area-west flex items-center justify-center p-1">
+					{#if positioned.west}
+						<OpponentZone
+							player_id={positioned.west.id}
+							player_name={positioned.west.name}
+							state={positioned.west.state}
+							is_current_turn={gs.current_player === positioned.west.id}
+							ready={gs.phase === 'swap' && gs.ready_players.includes(positioned.west.id)}
+							compact
+						/>
+					{/if}
+				</div>
+
+				<!-- Center: Game Status + Pile + Deck + Buttons -->
+				<div class="area-center flex flex-col items-center justify-center gap-3">
 					{#if gs.phase !== 'finished'}
 						<GameStatus
 							phase={gs.phase}
@@ -456,7 +478,38 @@
 						</div>
 					{/if}
 
-					<!-- Action Buttons / Game Over -->
+				</div>
+
+				<!-- East: side opponent (compact) -->
+				<div class="area-east flex items-center justify-center p-1">
+					{#if positioned.east}
+						<OpponentZone
+							player_id={positioned.east.id}
+							player_name={positioned.east.name}
+							state={positioned.east.state}
+							is_current_turn={gs.current_player === positioned.east.id}
+							ready={gs.phase === 'swap' && gs.ready_players.includes(positioned.east.id)}
+							compact
+						/>
+					{/if}
+				</div>
+
+				<!-- South: Player's cards -->
+				<div class="area-south border-t border-green-800 bg-green-950 p-3">
+					<PlayerHand
+						hand={gs.own_state.hand}
+						face_up={gs.own_state.face_up}
+						face_down_count={gs.own_state.face_down_count}
+						discard_pile={gs.discard_pile}
+						selected_card_ids={gs.phase === 'swap' ? (swap_hand_card_id ? [swap_hand_card_id] : []) : game_store.selected_card_ids}
+						phase={gs.phase}
+						is_current_turn={is_my_turn}
+						on_card_click={gs.phase === 'swap' ? handle_swap_card_click : handle_play_card_click}
+					/>
+				</div>
+
+				<!-- Actions: buttons and instructions below player hand -->
+				<div class="area-actions flex flex-col items-center gap-1 bg-green-950 px-3 pb-3">
 					{#if gs.phase === 'finished'}
 						<div class="flex flex-col items-center gap-3">
 							<h1 class="text-2xl font-bold">Game Over!</h1>
@@ -501,7 +554,7 @@
 							<span class="text-xs text-green-400">{ready_count}/{total_players} ready</span>
 						</div>
 					{:else if gs.phase === 'play' && (is_my_turn || can_complete_four_of_a_kind)}
-						<div class="flex gap-2">
+						<div class="flex flex-wrap justify-center gap-2">
 							<button
 								onclick={handle_play}
 								disabled={game_store.selected_card_ids.length === 0}
@@ -527,20 +580,6 @@
 							{/if}
 						</div>
 					{/if}
-				</div>
-
-				<!-- Bottom: Player's cards -->
-				<div class="border-t border-green-800 bg-green-950 p-3">
-					<PlayerHand
-						hand={gs.own_state.hand}
-						face_up={gs.own_state.face_up}
-						face_down_count={gs.own_state.face_down_count}
-						discard_pile={gs.discard_pile}
-						selected_card_ids={gs.phase === 'swap' ? (swap_hand_card_id ? [swap_hand_card_id] : []) : game_store.selected_card_ids}
-						phase={gs.phase}
-						is_current_turn={is_my_turn}
-						on_card_click={gs.phase === 'swap' ? handle_swap_card_click : handle_play_card_click}
-					/>
 				</div>
 			</div>
 		{:else}

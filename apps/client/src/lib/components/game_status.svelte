@@ -28,7 +28,7 @@
 
 <div class="flex flex-col items-center gap-1">
 	{#if phase === 'swap'}
-		<span class="text-sm font-medium text-purple-600">Swap Phase — arrange your cards, then Ready up</span>
+		<span class="text-sm font-medium text-green-300">Swap Phase — arrange your cards, then Ready up</span>
 	{:else if phase === 'play'}
 		<span class="text-sm {is_my_turn ? 'font-bold text-yellow-300' : 'font-medium text-green-400'}">
 			{is_my_turn ? 'Your turn!' : `${current_player_name}'s turn`}

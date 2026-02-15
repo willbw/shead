@@ -371,7 +371,7 @@ export function create_socket_server(
       broadcast_lobby_update(room)
     })
 
-    socket.on('lobby:practice', (difficulty, ack) => {
+    socket.on('lobby:practice', (difficulty, bot_count, ack) => {
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
@@ -393,29 +393,48 @@ export function create_socket_server(
         s.room_id = null
       }
 
-      const room = room_manager.create_room('shithead', game_config)
+      // Practice rooms use default config (ignore game_config which may have a small deck)
+      const room = room_manager.create_room('shithead', {})
       if (!room) {
         ack({ ok: false, reason: 'Failed to create room' })
         return
       }
 
+      // Clamp bot_count to 1-3
+      const count = Math.max(1, Math.min(3, Math.floor(bot_count) || 1))
       const difficulty_label = difficulty === 'easy' ? '' : difficulty === 'medium' ? ' (Med)' : ' (Hard)'
-      const bot_player = { id: 'bot-1', name: `Bot${difficulty_label}`, connected: true }
+      const bot_ids: string[] = []
+
       room.add_player(s.player)
-      room.add_player(bot_player)
+      for (let i = 1; i <= count; i++) {
+        const bot_id = `bot-${i}`
+        bot_ids.push(bot_id)
+        const bot_name = count === 1 ? `Bot${difficulty_label}` : `Bot ${i}${difficulty_label}`
+        room.add_player({ id: bot_id, name: bot_name, connected: true })
+      }
 
       s.room_id = room.id
       socket.join(room.id)
       setup_room_listeners(room)
 
-      const start_result = room.start()
+      let start_result
+      try {
+        start_result = room.start()
+      } catch (e) {
+        ack({ ok: false, reason: (e as Error).message || 'Failed to start game' })
+        room_manager.destroy_room(room.id)
+        s.room_id = null
+        return
+      }
       if (!start_result.valid) {
         ack({ ok: false, reason: start_result.reason })
+        room_manager.destroy_room(room.id)
+        s.room_id = null
         return
       }
 
       const typed_room = room as unknown as Game_room<Shithead_state, Shithead_command, unknown>
-      const controller = new Bot_controller(typed_room, ['bot-1'], difficulty)
+      const controller = new Bot_controller(typed_room, bot_ids, difficulty)
       bot_controllers.set(room.id, controller)
 
       ack({ ok: true, room: get_lobby_state(room), player_token: s.token })
