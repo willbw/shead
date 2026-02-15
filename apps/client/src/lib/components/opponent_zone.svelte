@@ -51,8 +51,8 @@
 		</div>
 	{/if}
 
-	<!-- Face-down count -->
-	{#if state.face_down_count > 0}
+	<!-- Face-down: only show when hand and face-up are both gone -->
+	{#if state.face_down_count > 0 && state.hand_count === 0 && state.face_up.length === 0}
 		<div class="flex gap-1">
 			{#each { length: state.face_down_count } as _, i (i)}
 				<CardBack />

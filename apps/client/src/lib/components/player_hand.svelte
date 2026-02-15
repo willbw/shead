@@ -135,14 +135,14 @@
 			</div>
 		{/if}
 
-		<!-- Face-down: show below everything, clickable only when active -->
-		{#if face_down_count > 0}
+		<!-- Face-down: only show when hand and face-up are both empty -->
+		{#if show_face_down}
 			<div class="flex flex-col items-center gap-1">
 				<span class="text-xs text-gray-400 uppercase">Face Down ({face_down_count})</span>
 				<div class="flex gap-1">
 					{#each { length: face_down_count } as _, i (i)}
 						<CardBack
-							onclick={show_face_down && is_current_turn ? () => on_card_click(`face_down_${i}`, 'face_down') : undefined}
+							onclick={is_current_turn ? () => on_card_click(`face_down_${i}`, 'face_down') : undefined}
 						/>
 					{/each}
 				</div>
