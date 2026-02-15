@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { connection_store } from '$lib/stores/connection.svelte'
-	import { connect, create_room, set_name, practice_vs_bot } from '$lib/socket.svelte'
+	import { lobby_store } from '$lib/stores/lobby.svelte'
+	import { connect, create_room, set_name, practice_vs_bot, leave_room } from '$lib/socket.svelte'
 
 	let error = $state('')
 	let loading = $state(false)
@@ -56,6 +57,26 @@
 			<h1 class="text-4xl font-bold text-gray-900">Shithead</h1>
 			<p class="mt-1 text-sm text-gray-500">Multiplayer card game</p>
 		</div>
+
+		{#if lobby_store.room}
+			<div class="rounded-lg bg-yellow-50 border border-yellow-200 p-4 space-y-2">
+				<p class="text-sm text-yellow-800">You're in room <span class="font-bold">{lobby_store.room.room_id}</span></p>
+				<div class="flex gap-2">
+					<button
+						onclick={() => goto('/' + lobby_store.room!.room_id)}
+						class="flex-1 rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500"
+					>
+						Rejoin
+					</button>
+					<button
+						onclick={async () => { try { await leave_room() } catch {} }}
+						class="flex-1 rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+					>
+						Leave Room
+					</button>
+				</div>
+			</div>
+		{/if}
 
 		{#if error}
 			<div class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
