@@ -34,7 +34,7 @@
 			{#if !compact}<span class="text-xs text-gray-400">Hand:</span>{/if}
 			<div class="flex -space-x-2 md:-space-x-3">
 				{#each { length: Math.min(state.hand_count, compact ? 3 : 6) } as _, i (i)}
-					<CardBack />
+					<CardBack small />
 				{/each}
 			</div>
 			{#if state.hand_count > (compact ? 3 : 6)}
@@ -47,7 +47,7 @@
 	{#if state.face_up.length > 0}
 		<div class="flex gap-0.5">
 			{#each state.face_up as card (card.id)}
-				<CardComponent {card} />
+				<CardComponent {card} small />
 			{/each}
 		</div>
 	{/if}
@@ -56,7 +56,7 @@
 	{#if state.face_down_count > 0}
 		<div class="flex gap-0.5">
 			{#each { length: state.face_down_count } as _, i (i)}
-				<CardBack small={state.hand_count > 0 || state.face_up.length > 0} />
+				<CardBack small />
 			{/each}
 		</div>
 	{/if}
