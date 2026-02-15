@@ -233,7 +233,11 @@
 	async function handle_play_lowest() {
 		if (!gs || gs.phase !== 'play' || !is_my_turn) return
 		const own = gs.own_state
-		const source = own.hand.length > 0 ? own.hand : own.face_up.length > 0 ? own.face_up : []
+		if (own.hand.length === 0 && own.face_up.length === 0 && own.face_down_count > 0) {
+			await send_command({ type: 'PLAY_FACE_DOWN', index: 0 })
+			return
+		}
+		const source = own.hand.length > 0 ? own.hand : own.face_up
 		if (source.length === 0) return
 		const playable = source.filter(c => can_play_on(c, gs.discard_pile))
 		if (playable.length === 0) return
@@ -248,6 +252,7 @@
 	function handle_keydown(e: KeyboardEvent) {
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 		if (e.key === 'l') handle_play_lowest()
+		if (e.key === 'Enter' && is_my_turn && gs && gs.discard_pile.length > 0) handle_pickup()
 	}
 
 	// Discard pile top card + effective top (visible beneath 3s)
@@ -478,7 +483,7 @@
 							>
 								{can_complete_four_of_a_kind && !is_my_turn ? 'Complete Four of a Kind!' : `Play Card${game_store.selected_card_ids.length > 1 ? 's' : ''}`}
 							</button>
-							{#if is_my_turn && !has_playable_card && gs.discard_pile.length > 0}
+							{#if is_my_turn && !has_playable_card && gs.discard_pile.length > 0 && (gs.own_state.hand.length > 0 || gs.own_state.face_up.length > 0)}
 								<button
 									onclick={handle_pickup}
 									class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500"
