@@ -527,6 +527,13 @@
 									</div>
 								</div>
 							{/if}
+							{#if action_log.length > 0}
+								<div class="flex flex-col items-center">
+									{#each action_log.slice(-4) as text, i (text + i)}
+										<span class="text-xs italic text-gray-400">{text}</span>
+									{/each}
+								</div>
+							{/if}
 							<button
 								onclick={handle_leave}
 								class="rounded bg-blue-600 px-6 py-2 text-sm font-medium hover:bg-blue-500"
