@@ -9,6 +9,7 @@
 </script>
 
 <svelte:head>
+	<title>let's play cards</title>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 

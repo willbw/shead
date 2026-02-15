@@ -3,7 +3,7 @@ import type { Base_command, Validation_result, Bot_difficulty } from './game'
 import type { Create_room_opts } from './lobby'
 
 export interface Server_to_client_events {
-  'session:init': (data: { player_id: string; token: string }) => void
+  'session:init': (data: { player_id: string; token: string; enabled_games: string[] }) => void
   'game:state': (state: unknown) => void
   'game:error': (error: { message: string }) => void
   'game:over': (scores: Record<string, number>) => void

@@ -26,6 +26,10 @@ const game_config: Record<string, unknown> = (() => {
   }
 })()
 
+const enabled_games: string[] = Array.isArray(game_config.enabled_games)
+  ? game_config.enabled_games as string[]
+  : ['shithead']
+
 type Typed_server = Server<Client_to_server_events, Server_to_client_events>
 type Typed_socket = Socket<Client_to_server_events, Server_to_client_events>
 
@@ -113,7 +117,7 @@ export function create_socket_server(
     socket_sessions.set(socket.id, session)
 
     // Tell the client its persistent player_id and token
-    socket.emit('session:init', { player_id, token })
+    socket.emit('session:init', { player_id, token, enabled_games })
 
     socket.on('player:reconnect', (incoming_token, ack) => {
       const existing = sessions.get(incoming_token)
@@ -270,6 +274,11 @@ export function create_socket_server(
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
+      if (!enabled_games.includes(opts.game_type)) {
+        ack({ ok: false, reason: `Game not enabled: ${opts.game_type}` })
+        return
+      }
+
       const room = room_manager.create_room(opts.game_type, game_config)
       if (!room) {
         ack({ ok: false, reason: `Unknown game type: ${opts.game_type}` })
@@ -374,6 +383,11 @@ export function create_socket_server(
     socket.on('lobby:practice', (game_type, difficulty, bot_count, ack) => {
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
+
+      if (!enabled_games.includes(game_type)) {
+        ack({ ok: false, reason: `Game not enabled: ${game_type}` })
+        return
+      }
 
       // Auto-leave previous room (e.g. finished game)
       if (s.room_id) {

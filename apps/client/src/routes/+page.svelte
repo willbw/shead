@@ -4,6 +4,8 @@
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { connect, create_room, set_name, practice_vs_bot, leave_room } from '$lib/socket.svelte'
 
+	const show_game_selector = $derived(connection_store.enabled_games.length > 1)
+
 	let error = $state('')
 	let loading = $state(false)
 	let practice_loading = $state<string | false>(false)
@@ -56,8 +58,7 @@
 <div class="flex min-h-screen items-center justify-center bg-gray-100 p-4">
 	<div class="w-full max-w-md space-y-6">
 		<div class="text-center">
-			<h1 class="text-4xl font-bold text-gray-900">Shead</h1>
-			<p class="mt-1 text-sm text-gray-500">Multiplayer card games</p>
+			<h1 class="text-4xl font-bold text-gray-900">let's play cards</h1>
 		</div>
 
 		{#if lobby_store.room}
@@ -85,20 +86,26 @@
 		{/if}
 
 		<!-- Game Type Selector -->
-		<div class="flex rounded-lg bg-white shadow-sm overflow-hidden">
-			<button
-				onclick={() => selected_game = 'shithead'}
-				class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'shithead' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
-			>
-				Shithead
-			</button>
-			<button
-				onclick={() => selected_game = 'gin-rummy'}
-				class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'gin-rummy' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
-			>
-				Gin Rummy
-			</button>
-		</div>
+		{#if show_game_selector}
+			<div class="flex rounded-lg bg-white shadow-sm overflow-hidden">
+				{#if connection_store.enabled_games.includes('shithead')}
+					<button
+						onclick={() => selected_game = 'shithead'}
+						class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'shithead' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
+					>
+						Shithead
+					</button>
+				{/if}
+				{#if connection_store.enabled_games.includes('gin-rummy')}
+					<button
+						onclick={() => selected_game = 'gin-rummy'}
+						class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'gin-rummy' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
+					>
+						Gin Rummy
+					</button>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="rounded-lg bg-white p-4 shadow-sm space-y-3">
 			<p class="text-center text-sm font-medium text-gray-700">Practice vs Bot</p>

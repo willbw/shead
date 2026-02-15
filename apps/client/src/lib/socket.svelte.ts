@@ -98,6 +98,7 @@ if (browser) {
       connection_store.player_id = data.player_id
       sessionStorage.setItem(PLAYER_ID_KEY, data.player_id)
     }
+    connection_store.enabled_games = data.enabled_games
   })
 
   socket.on('disconnect', () => {
