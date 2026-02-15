@@ -63,3 +63,16 @@ packages/
 | `pnpm check` | Type-check all packages |
 | `pnpm test` | Run tests |
 | `pnpm format` | Format with Prettier |
+
+## Deploy
+
+On the DigitalOcean droplet:
+
+```bash
+cd /path/to/shead
+git pull
+docker build -t shead .
+docker stop shead && docker rm shead
+docker run -d --name shead -p 3001:3001 --restart unless-stopped shead
+sudo systemctl reload caddy
+```
