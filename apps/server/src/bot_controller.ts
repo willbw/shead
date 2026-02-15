@@ -1,13 +1,14 @@
-import type { Base_command } from '@shead/shared'
+import type { Bot_difficulty } from '@shead/shared'
 import type { Game_room } from '@shead/game-engine'
 import type { Shithead_state, Shithead_command } from '@shead/games'
-import { compute_bot_commands, is_bot_player } from '@shead/games'
+import { compute_bot_commands_for_difficulty } from '@shead/games'
 
 const BOT_DELAY_MS = 800
 
 export class Bot_controller {
   private room: Game_room<Shithead_state, Shithead_command, unknown>
   private bot_ids: string[]
+  private difficulty: Bot_difficulty
   private unsubscribe: () => void
   private pending_timer: ReturnType<typeof setTimeout> | null = null
   private destroyed = false
@@ -15,9 +16,11 @@ export class Bot_controller {
   constructor(
     room: Game_room<Shithead_state, Shithead_command, unknown>,
     bot_ids: string[],
+    difficulty: Bot_difficulty = 'easy',
   ) {
     this.room = room
     this.bot_ids = bot_ids
+    this.difficulty = difficulty
     this.unsubscribe = room.on((event) => {
       if (this.destroyed) return
       if (event.type === 'state_changed') {
@@ -48,7 +51,7 @@ export class Bot_controller {
     if (!state) return
 
     for (const bot_id of this.bot_ids) {
-      const commands = compute_bot_commands(state, bot_id)
+      const commands = compute_bot_commands_for_difficulty(state, bot_id, this.difficulty)
       for (const cmd of commands) {
         const result = this.room.handle_command(cmd)
         if (!result.valid) break

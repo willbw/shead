@@ -360,7 +360,7 @@ export function create_socket_server(
       broadcast_lobby_update(room)
     })
 
-    socket.on('lobby:practice', (ack) => {
+    socket.on('lobby:practice', (difficulty, ack) => {
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
@@ -388,7 +388,8 @@ export function create_socket_server(
         return
       }
 
-      const bot_player = { id: 'bot-1', name: 'Bot', connected: true }
+      const difficulty_label = difficulty === 'easy' ? '' : difficulty === 'medium' ? ' (Med)' : ' (Hard)'
+      const bot_player = { id: 'bot-1', name: `Bot${difficulty_label}`, connected: true }
       room.add_player(s.player)
       room.add_player(bot_player)
 
@@ -403,7 +404,7 @@ export function create_socket_server(
       }
 
       const typed_room = room as unknown as Game_room<Shithead_state, Shithead_command, unknown>
-      const controller = new Bot_controller(typed_room, ['bot-1'])
+      const controller = new Bot_controller(typed_room, ['bot-1'], difficulty)
       bot_controllers.set(room.id, controller)
 
       ack({ ok: true, room: get_lobby_state(room), player_token: s.token })

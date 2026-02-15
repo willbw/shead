@@ -1,6 +1,7 @@
-import type { Card, Rank } from '@shead/shared'
+import type { Card, Rank, Bot_difficulty } from '@shead/shared'
 import { RANK_VALUES, can_play_on } from '@shead/shared'
 import type { Shithead_state, Shithead_command } from './types'
+import { ismcts_compute_command, MEDIUM_CONFIG, HARD_CONFIG } from './bot_ismcts'
 
 /** Priority for face-up card selection during swap phase.
  *  Lower number = better to have face-up (want strong cards face-up).
@@ -147,6 +148,36 @@ export function compute_bot_commands(
     const current = state.player_order[state.current_player_index]
     if (current !== player_id) return []
     return [compute_play_command(state, player_id)]
+  }
+
+  return []
+}
+
+/** Compute bot commands with difficulty-aware strategy.
+ *  Easy: greedy (same as compute_bot_commands).
+ *  Medium/Hard: ISMCTS for play phase, greedy for swap phase. */
+export function compute_bot_commands_for_difficulty(
+  state: Shithead_state,
+  player_id: string,
+  difficulty: Bot_difficulty,
+): Shithead_command[] {
+  // Swap phase always uses greedy strategy (swap decisions are straightforward)
+  if (state.phase === 'swap') {
+    if (state.ready_players.has(player_id)) return []
+    const ps = state.players.get(player_id)!
+    return compute_swap_commands(player_id, ps.hand, ps.face_up)
+  }
+
+  if (state.phase === 'play') {
+    const current = state.player_order[state.current_player_index]
+    if (current !== player_id) return []
+
+    if (difficulty === 'easy') {
+      return [compute_play_command(state, player_id)]
+    }
+
+    const config = difficulty === 'hard' ? HARD_CONFIG : MEDIUM_CONFIG
+    return [ismcts_compute_command(state, player_id, config)]
   }
 
   return []

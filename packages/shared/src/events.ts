@@ -1,5 +1,5 @@
 import type { Lobby_state } from './lobby'
-import type { Base_command, Validation_result } from './game'
+import type { Base_command, Validation_result, Bot_difficulty } from './game'
 import type { Create_room_opts } from './lobby'
 
 export interface Server_to_client_events {
@@ -20,5 +20,5 @@ export interface Client_to_server_events {
   'lobby:list': (ack: (rooms: Lobby_state[]) => void) => void
   'lobby:start': (ack: (result: { ok: true } | { ok: false; reason: string }) => void) => void
   'game:command': (cmd: Base_command & Record<string, unknown>, ack: (result: Validation_result) => void) => void
-  'lobby:practice': (ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
+  'lobby:practice': (difficulty: Bot_difficulty, ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
 }

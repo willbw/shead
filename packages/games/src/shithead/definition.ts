@@ -86,7 +86,7 @@ function get_playable_source(player_state: { hand: Card[]; face_up: Card[]; face
   return 'face_down'
 }
 
-function clone_state(state: Shithead_state): Shithead_state {
+export function clone_state(state: Shithead_state): Shithead_state {
   return {
     deck: [...state.deck],
     discard_pile: [...state.discard_pile],
@@ -281,6 +281,14 @@ export const shithead_definition: Card_game_definition<
     if (cmd.type === 'PICK_UP_PILE') {
       if (state.discard_pile.length === 0) {
         return { valid: false, reason: 'Pile is empty' }
+      }
+      // Can only pick up if no playable cards in current source
+      const source = get_playable_source(player_state)
+      if (source !== 'face_down') {
+        const available = source === 'hand' ? player_state.hand : player_state.face_up
+        if (available.some(c => can_play_on(c, state.discard_pile))) {
+          return { valid: false, reason: 'You have playable cards' }
+        }
       }
       return { valid: true }
     }

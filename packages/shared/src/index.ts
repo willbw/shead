@@ -1,5 +1,5 @@
 export { type Suit, type Rank, type Card, type Joker, type Game_card, type Rank_rule, type Ruleset, Direction, SUITS, RANKS, create_deck, create_deck_with_jokers, shuffle, RANK_VALUES, DEFAULT_RULESET, sort_cards, effective_top_card, can_play_on } from './card'
 export { type Player } from './player'
-export { type Base_command, type Validation_result } from './game'
+export { type Base_command, type Validation_result, type Bot_difficulty } from './game'
 export { type Lobby_state, type Create_room_opts } from './lobby'
 export { type Server_to_client_events, type Client_to_server_events } from './events'

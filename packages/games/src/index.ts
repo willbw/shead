@@ -1,5 +1,6 @@
 export {
   shithead_definition,
+  clone_state,
   type Shithead_state,
   type Shithead_player_state,
   type Shithead_command,
@@ -9,7 +10,12 @@ export {
   type Visible_own_player_state,
   DEFAULT_SHITHEAD_CONFIG,
   compute_bot_commands,
+  compute_bot_commands_for_difficulty,
   compute_swap_commands,
   compute_play_command,
   is_bot_player,
+  ismcts_compute_command,
+  MEDIUM_CONFIG,
+  HARD_CONFIG,
+  type Ismcts_config,
 } from './shithead'

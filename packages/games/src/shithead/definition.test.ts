@@ -601,6 +601,8 @@ describe('shithead_definition', () => {
     it('picks up the entire pile into hand', () => {
       const deck = create_ordered_deck()
       const state = deal_deterministic(deck, PLAYERS)
+      // Give p1 only low cards that can't beat an Ace
+      state.players.get('p1')!.hand = [make_card('hearts', '4'), make_card('clubs', '5'), make_card('diamonds', '6')]
       state.discard_pile = [make_card('hearts', 'A'), make_card('diamonds', 'K')]
       const play_state = ready_all(state)
 
@@ -620,9 +622,21 @@ describe('shithead_definition', () => {
       expect_invalid(play_state, { player_id: 'p1', type: 'PICK_UP_PILE' }, 'Pile is empty')
     })
 
+    it('rejects picking up when player has playable cards', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = [make_card('hearts', 'A'), make_card('clubs', 'K')]
+      state.discard_pile = [make_card('spades', '4')]
+      const play_state = ready_all(state)
+
+      expect_invalid(play_state, { player_id: 'p1', type: 'PICK_UP_PILE' }, 'You have playable cards')
+    })
+
     it('advances turn after picking up', () => {
       const deck = create_ordered_deck()
       const state = deal_deterministic(deck, PLAYERS)
+      state.players.get('p1')!.hand = [make_card('hearts', '4'), make_card('clubs', '5')]
       state.discard_pile = [make_card('hearts', 'A')]
       const play_state = ready_all(state)
 
