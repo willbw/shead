@@ -235,6 +235,20 @@ export function start_game(): Promise<void> {
   })
 }
 
+export function practice_vs_bot(): Promise<Lobby_state> {
+  return new Promise((resolve, reject) => {
+    socket.emit('lobby:practice', (result) => {
+      if (result.ok) {
+        lobby_store.room = result.room
+        sessionStorage.setItem(TOKEN_KEY, result.player_token)
+        resolve(result.room)
+      } else {
+        reject(new Error(result.reason))
+      }
+    })
+  })
+}
+
 export function send_command(cmd: Record<string, unknown>): Promise<Validation_result> {
   return new Promise((resolve) => {
     socket.emit('game:command', cmd as Parameters<Client_to_server_events['game:command']>[0], (result) => {

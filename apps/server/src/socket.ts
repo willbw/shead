@@ -11,7 +11,9 @@ import type {
 import { Room_manager } from '@shead/game-engine'
 import type { Game_room } from '@shead/game-engine'
 import { create_deck } from '@shead/shared'
-import type { Shithead_state } from '@shead/games'
+import type { Shithead_state, Shithead_command } from '@shead/games'
+import { is_bot_player } from '@shead/games'
+import { Bot_controller } from './bot_controller'
 
 type Typed_server = Server<Client_to_server_events, Server_to_client_events>
 type Typed_socket = Socket<Client_to_server_events, Server_to_client_events>
@@ -40,6 +42,9 @@ export function create_socket_server(
 
   // Map socket_id → Session (for quick lookup on current connection)
   const socket_sessions = new Map<string, Session>()
+
+  // Map room_id → Bot_controller (for practice games)
+  const bot_controllers = new Map<string, Bot_controller>()
 
   function get_lobby_state(room: Game_room<unknown, Base_command, unknown>): Lobby_state {
     return {
@@ -315,6 +320,11 @@ export function create_socket_server(
         socket.leave(room.id)
 
         if (room.get_player_count() === 0) {
+          const bc = bot_controllers.get(room.id)
+          if (bc) {
+            bc.destroy()
+            bot_controllers.delete(room.id)
+          }
           room_manager.destroy_room(room.id)
         } else {
           broadcast_lobby_update(room)
@@ -348,7 +358,43 @@ export function create_socket_server(
 
       ack({ ok: true })
       broadcast_lobby_update(room)
-      broadcast_game_state(room)
+    })
+
+    socket.on('lobby:practice', (ack) => {
+      const s = socket_sessions.get(socket.id)
+      if (!s) { ack({ ok: false, reason: 'No session' }); return }
+
+      if (s.room_id) {
+        ack({ ok: false, reason: 'Already in a room' })
+        return
+      }
+
+      const room = room_manager.create_room('shithead', {})
+      if (!room) {
+        ack({ ok: false, reason: 'Failed to create room' })
+        return
+      }
+
+      const bot_player = { id: 'bot-1', name: 'Bot', connected: true }
+      room.add_player(s.player)
+      room.add_player(bot_player)
+
+      s.room_id = room.id
+      socket.join(room.id)
+      setup_room_listeners(room)
+
+      const start_result = room.start()
+      if (!start_result.valid) {
+        ack({ ok: false, reason: start_result.reason })
+        return
+      }
+
+      const typed_room = room as unknown as Game_room<Shithead_state, Shithead_command, unknown>
+      const controller = new Bot_controller(typed_room, ['bot-1'])
+      bot_controllers.set(room.id, controller)
+
+      ack({ ok: true, room: get_lobby_state(room), player_token: s.token })
+      broadcast_lobby_update(room)
     })
 
     socket.on('game:command', (cmd, ack) => {
@@ -369,10 +415,6 @@ export function create_socket_server(
       const full_cmd = { ...cmd, player_id: s.player_id } as Base_command & Record<string, unknown>
       const result = room.handle_command(full_cmd)
       ack(result)
-
-      if (result.valid) {
-        broadcast_game_state(room)
-      }
     })
 
     // Debug: skip to face-down phase for the calling player
@@ -411,7 +453,6 @@ export function create_socket_server(
       state.ready_players = new Set(state.player_order)
 
       room._debug_set_state(state)
-      broadcast_game_state(room)
       ack?.({ ok: true })
     })
   }
@@ -426,6 +467,7 @@ export function create_socket_server(
     socket.removeAllListeners('lobby:join')
     socket.removeAllListeners('lobby:leave')
     socket.removeAllListeners('lobby:start')
+    socket.removeAllListeners('lobby:practice')
     socket.removeAllListeners('game:command')
     socket.removeAllListeners('debug:face_down_test')
     setup_session_handlers(socket, session)
@@ -439,9 +481,17 @@ export function create_socket_server(
     rooms_with_listeners.add(room.id)
 
     room.on((event) => {
+      if (event.type === 'state_changed') {
+        broadcast_game_state(room)
+      }
       if (event.type === 'game_over') {
         broadcast_game_over(room, event.scores)
         setTimeout(() => {
+          const bc = bot_controllers.get(room.id)
+          if (bc) {
+            bc.destroy()
+            bot_controllers.delete(room.id)
+          }
           room_manager.destroy_room(room.id)
           rooms_with_listeners.delete(room.id)
         }, 60_000)

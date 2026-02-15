@@ -10,3 +10,4 @@ export type {
 } from './types'
 export { DEFAULT_SHITHEAD_CONFIG } from './types'
 export { Direction } from '@shead/shared'
+export { compute_bot_commands, compute_swap_commands, compute_play_command, is_bot_player } from './bot'

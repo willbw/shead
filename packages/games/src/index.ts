@@ -8,4 +8,8 @@ export {
   type Visible_player_state,
   type Visible_own_player_state,
   DEFAULT_SHITHEAD_CONFIG,
+  compute_bot_commands,
+  compute_swap_commands,
+  compute_play_command,
+  is_bot_player,
 } from './shithead'

@@ -103,6 +103,10 @@ export class Game_room<
     return { valid: true }
   }
 
+  get_state(): T_state | null {
+    return this.state
+  }
+
   /** Debug only — replace internal state directly */
   _debug_set_state(state: T_state): void {
     this.state = state

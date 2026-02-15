@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { connection_store } from '$lib/stores/connection.svelte'
-	import { connect, create_room } from '$lib/socket.svelte'
+	import { connect, create_room, set_name, practice_vs_bot } from '$lib/socket.svelte'
 
 	let error = $state('')
 	let loading = $state(false)
+	let practice_loading = $state(false)
 	let join_code = $state('')
 
 	function handle_join() {
@@ -31,6 +32,22 @@
 			loading = false
 		}
 	}
+
+	async function handle_practice() {
+		error = ''
+		practice_loading = true
+		try {
+			if (!connection_store.player_name || connection_store.player_name.startsWith('Player-')) {
+				await set_name('Player')
+			}
+			const room = await practice_vs_bot()
+			goto('/' + room.room_id)
+		} catch (e) {
+			error = (e as Error).message
+		} finally {
+			practice_loading = false
+		}
+	}
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-gray-100 p-4">
@@ -45,6 +62,20 @@
 		{/if}
 
 		<div class="rounded-lg bg-white p-4 shadow-sm space-y-3">
+			<button
+				onclick={handle_practice}
+				disabled={!connection_store.connected || practice_loading}
+				class="w-full rounded bg-purple-600 px-4 py-3 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				{practice_loading ? 'Starting...' : 'Practice vs Bot'}
+			</button>
+
+			<div class="flex items-center gap-2">
+				<div class="h-px flex-1 bg-gray-200"></div>
+				<span class="text-xs text-gray-400">or play with friends</span>
+				<div class="h-px flex-1 bg-gray-200"></div>
+			</div>
+
 			<button
 				onclick={handle_create}
 				disabled={!connection_store.connected || loading}

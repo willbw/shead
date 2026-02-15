@@ -3,7 +3,8 @@
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
-	import { effective_top_card, can_play_on } from '@shead/shared'
+	import { effective_top_card, can_play_on, RANK_VALUES, DEFAULT_RULESET } from '@shead/shared'
+	import type { Card } from '@shead/shared'
 	import { connect, set_name, join_room, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
 	import { fly } from 'svelte/transition'
 	import CardComponent from '$lib/components/card.svelte'
@@ -212,11 +213,33 @@
 		game_store.selected_card_ids = []
 	}
 
+	async function handle_play_lowest() {
+		if (!gs || gs.phase !== 'play' || !is_my_turn) return
+		const own = gs.own_state
+		const source = own.hand.length > 0 ? own.hand : own.face_up.length > 0 ? own.face_up : []
+		if (source.length === 0) return
+		const playable = source.filter(c => can_play_on(c, gs.discard_pile))
+		if (playable.length === 0) return
+		const special = (c: Card) => DEFAULT_RULESET[c.rank] ? 1 : 0
+		playable.sort((a, b) => special(a) - special(b) || RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
+		const lowest_rank = playable[0].rank
+		const to_play = playable.filter(c => c.rank === lowest_rank)
+		await send_command({ type: 'PLAY_CARD', card_ids: to_play.map(c => c.id) })
+		game_store.selected_card_ids = []
+	}
+
+	function handle_keydown(e: KeyboardEvent) {
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+		if (e.key === 'l') handle_play_lowest()
+	}
+
 	// Discard pile top card + effective top (visible beneath 3s)
 	const pile_top = $derived(gs && gs.discard_pile.length > 0 ? gs.discard_pile[gs.discard_pile.length - 1] : null)
 	const pile_effective = $derived(gs ? effective_top_card(gs.discard_pile) ?? null : null)
 	const show_effective = $derived(pile_top !== null && pile_top.rank === '3' && pile_effective !== null && pile_effective.id !== pile_top.id)
 </script>
+
+<svelte:window onkeydown={handle_keydown} />
 
 {#if !in_room}
 	<!-- Join / Set Name Form -->
