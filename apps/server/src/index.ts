@@ -6,8 +6,10 @@ import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { serve } from '@hono/node-server'
 import { Room_manager } from '@shead/game-engine'
-import { shithead_definition } from '@shead/games'
-import type { Base_command } from '@shead/shared'
+import { shithead_definition, compute_bot_commands_for_difficulty, gin_rummy_definition, compute_gin_rummy_bot_commands } from '@shead/games'
+import type { Shithead_state } from '@shead/games'
+import type { Base_command, Bot_difficulty } from '@shead/shared'
+import { register_bot } from './bot_registry'
 import { create_socket_server } from './socket'
 
 const app = new Hono()
@@ -32,6 +34,15 @@ const PORT = Number(process.env.PORT) || 3001
 // Create the room manager and register games
 const room_manager = new Room_manager()
 room_manager.register_game(shithead_definition as Parameters<typeof room_manager.register_game>[0])
+room_manager.register_game(gin_rummy_definition as Parameters<typeof room_manager.register_game>[0])
+
+// Register bot functions
+register_bot('shithead', (state: unknown, player_id: string, difficulty: Bot_difficulty) =>
+  compute_bot_commands_for_difficulty(state as Shithead_state, player_id, difficulty),
+)
+register_bot('gin-rummy', (state: unknown, player_id: string, difficulty: Bot_difficulty) =>
+  compute_gin_rummy_bot_commands(state, player_id, difficulty),
+)
 
 // Create server and attach both Hono and Socket.IO
 const http_server = serve({ fetch: app.fetch, port: PORT }, () => {

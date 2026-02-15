@@ -1,26 +1,29 @@
-import type { Bot_difficulty } from '@shead/shared'
+import type { Base_command, Bot_difficulty } from '@shead/shared'
 import type { Game_room } from '@shead/game-engine'
-import type { Shithead_state, Shithead_command } from '@shead/games'
-import { compute_bot_commands_for_difficulty } from '@shead/games'
 
 const BOT_DELAY_MS = 800
 
+export type Bot_command_fn = (state: unknown, player_id: string, difficulty: Bot_difficulty) => Base_command[]
+
 export class Bot_controller {
-  private room: Game_room<Shithead_state, Shithead_command, unknown>
+  private room: Game_room<unknown, Base_command, unknown>
   private bot_ids: string[]
   private difficulty: Bot_difficulty
+  private compute_commands: Bot_command_fn
   private unsubscribe: () => void
   private pending_timer: ReturnType<typeof setTimeout> | null = null
   private destroyed = false
 
   constructor(
-    room: Game_room<Shithead_state, Shithead_command, unknown>,
+    room: Game_room<unknown, Base_command, unknown>,
     bot_ids: string[],
-    difficulty: Bot_difficulty = 'easy',
+    difficulty: Bot_difficulty,
+    compute_commands: Bot_command_fn,
   ) {
     this.room = room
     this.bot_ids = bot_ids
     this.difficulty = difficulty
+    this.compute_commands = compute_commands
     this.unsubscribe = room.on((event) => {
       if (this.destroyed) return
       if (event.type === 'state_changed') {
@@ -49,15 +52,16 @@ export class Bot_controller {
     if (this.destroyed) return
     const state = this.room.get_state()
     if (!state) return
+    if (this.room.get_status() === 'finished') return
 
     for (const bot_id of this.bot_ids) {
-      const commands = compute_bot_commands_for_difficulty(state, bot_id, this.difficulty)
+      const commands = this.compute_commands(state, bot_id, this.difficulty)
       for (const cmd of commands) {
         const result = this.room.handle_command(cmd)
         if (!result.valid) break
         // After each command, re-check state (it may have changed)
         const new_state = this.room.get_state()
-        if (!new_state || new_state.phase === 'finished') return
+        if (!new_state || this.room.get_status() === 'finished') return
       }
     }
   }

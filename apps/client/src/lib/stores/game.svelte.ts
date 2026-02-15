@@ -29,7 +29,7 @@ export interface Visible_shithead_state {
 }
 
 export const game_store = $state<{
-  game_state: Visible_shithead_state | null
+  game_state: unknown
   selected_card_ids: string[]
   error_message: string | null
   scores: Record<string, number> | null

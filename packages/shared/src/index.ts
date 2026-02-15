@@ -1,4 +1,4 @@
-export { type Suit, type Rank, type Card, type Joker, type Game_card, type Rank_rule, type Ruleset, Direction, SUITS, RANKS, create_deck, create_deck_with_jokers, shuffle, RANK_VALUES, DEFAULT_RULESET, sort_cards, effective_top_card, can_play_on } from './card'
+export { type Suit, type Rank, type Card, type Joker, type Game_card, type Rank_rule, type Ruleset, Direction, SUITS, RANKS, create_deck, create_deck_with_jokers, shuffle, RANK_VALUES, GIN_RUMMY_POINT_VALUES, GIN_RANK_ORDER, DEFAULT_RULESET, sort_cards, effective_top_card, can_play_on } from './card'
 export { type Player } from './player'
 export { type Base_command, type Validation_result, type Bot_difficulty } from './game'
 export { type Lobby_state, type Create_room_opts } from './lobby'

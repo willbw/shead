@@ -20,5 +20,5 @@ export interface Client_to_server_events {
   'lobby:list': (ack: (rooms: Lobby_state[]) => void) => void
   'lobby:start': (ack: (result: { ok: true } | { ok: false; reason: string }) => void) => void
   'game:command': (cmd: Base_command & Record<string, unknown>, ack: (result: Validation_result) => void) => void
-  'lobby:practice': (difficulty: Bot_difficulty, bot_count: number, ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
+  'lobby:practice': (game_type: string, difficulty: Bot_difficulty, bot_count: number, ack: (result: { ok: true; room: Lobby_state; player_token: string } | { ok: false; reason: string }) => void) => void
 }

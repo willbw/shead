@@ -9,6 +9,7 @@
 	let practice_loading = $state<string | false>(false)
 	const is_practice_loading = $derived(!!practice_loading)
 	let join_code = $state('')
+	let selected_game = $state<'shithead' | 'gin-rummy'>('shithead')
 
 	function handle_join() {
 		const code = join_code.trim()
@@ -26,7 +27,7 @@
 		error = ''
 		loading = true
 		try {
-			const room = await create_room()
+			const room = await create_room(selected_game)
 			goto('/' + room.room_id)
 		} catch (e) {
 			error = (e as Error).message
@@ -42,7 +43,7 @@
 			if (!connection_store.player_name || connection_store.player_name.startsWith('Player-')) {
 				await set_name('Player')
 			}
-			const room = await practice_vs_bot(difficulty, bot_count)
+			const room = await practice_vs_bot(selected_game, difficulty, bot_count)
 			goto('/' + room.room_id)
 		} catch (e) {
 			error = (e as Error).message
@@ -55,8 +56,8 @@
 <div class="flex min-h-screen items-center justify-center bg-gray-100 p-4">
 	<div class="w-full max-w-md space-y-6">
 		<div class="text-center">
-			<h1 class="text-4xl font-bold text-gray-900">Shithead</h1>
-			<p class="mt-1 text-sm text-gray-500">Multiplayer card game</p>
+			<h1 class="text-4xl font-bold text-gray-900">Shead</h1>
+			<p class="mt-1 text-sm text-gray-500">Multiplayer card games</p>
 		</div>
 
 		{#if lobby_store.room}
@@ -82,6 +83,22 @@
 		{#if error}
 			<div class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
 		{/if}
+
+		<!-- Game Type Selector -->
+		<div class="flex rounded-lg bg-white shadow-sm overflow-hidden">
+			<button
+				onclick={() => selected_game = 'shithead'}
+				class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'shithead' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
+			>
+				Shithead
+			</button>
+			<button
+				onclick={() => selected_game = 'gin-rummy'}
+				class="flex-1 px-4 py-3 text-sm font-medium transition-colors {selected_game === 'gin-rummy' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}"
+			>
+				Gin Rummy
+			</button>
+		</div>
 
 		<div class="rounded-lg bg-white p-4 shadow-sm space-y-3">
 			<p class="text-center text-sm font-medium text-gray-700">Practice vs Bot</p>
@@ -110,30 +127,32 @@
 						{practice_loading === 'hard-1' ? 'Starting...' : 'Hard'}
 					</button>
 				</div>
-				<p class="text-xs text-gray-400 text-center">4-Player</p>
-				<div class="flex gap-2">
-					<button
-						onclick={() => handle_practice('easy', 3)}
-						disabled={!connection_store.connected || is_practice_loading}
-						class="flex-1 rounded bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{practice_loading === 'easy-3' ? 'Starting...' : 'Easy'}
-					</button>
-					<button
-						onclick={() => handle_practice('medium', 3)}
-						disabled={!connection_store.connected || is_practice_loading}
-						class="flex-1 rounded bg-yellow-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{practice_loading === 'medium-3' ? 'Starting...' : 'Medium'}
-					</button>
-					<button
-						onclick={() => handle_practice('hard', 3)}
-						disabled={!connection_store.connected || is_practice_loading}
-						class="flex-1 rounded bg-red-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{practice_loading === 'hard-3' ? 'Starting...' : 'Hard'}
-					</button>
-				</div>
+				{#if selected_game === 'shithead'}
+					<p class="text-xs text-gray-400 text-center">4-Player</p>
+					<div class="flex gap-2">
+						<button
+							onclick={() => handle_practice('easy', 3)}
+							disabled={!connection_store.connected || is_practice_loading}
+							class="flex-1 rounded bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{practice_loading === 'easy-3' ? 'Starting...' : 'Easy'}
+						</button>
+						<button
+							onclick={() => handle_practice('medium', 3)}
+							disabled={!connection_store.connected || is_practice_loading}
+							class="flex-1 rounded bg-yellow-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{practice_loading === 'medium-3' ? 'Starting...' : 'Medium'}
+						</button>
+						<button
+							onclick={() => handle_practice('hard', 3)}
+							disabled={!connection_store.connected || is_practice_loading}
+							class="flex-1 rounded bg-red-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{practice_loading === 'hard-3' ? 'Starting...' : 'Hard'}
+						</button>
+					</div>
+				{/if}
 			</div>
 
 			<div class="flex items-center gap-2">

@@ -4,6 +4,7 @@
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
+	import type { Visible_shithead_state } from '$lib/stores/game.svelte'
 	import { effective_top_card, can_play_on, RANK_VALUES, DEFAULT_RULESET } from '@shead/shared'
 	import type { Card } from '@shead/shared'
 	import { connect, set_name, join_room, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
@@ -13,6 +14,7 @@
 	import PlayerHand from '$lib/components/player_hand.svelte'
 	import OpponentZone from '$lib/components/opponent_zone.svelte'
 	import GameStatus from '$lib/components/game_status.svelte'
+	import GinRummyGameTable from '$lib/components/gin_rummy/game_table.svelte'
 
 	let { data } = $props()
 	const room_id = $derived(data.room_id)
@@ -22,6 +24,8 @@
 	let join_loading = $state(false)
 	let copied = $state(false)
 	let revealing = $state(false)
+
+	const game_type = $derived(lobby_store.room?.game_type ?? 'shithead')
 
 	// Connect if not yet
 	$effect(() => {
@@ -84,7 +88,7 @@
 	}
 
 	const room = $derived(lobby_store.room)
-	const gs = $derived(game_store.game_state)
+	const gs = $derived(game_store.game_state as Visible_shithead_state | null)
 	const my_id = $derived(connection_store.player_id)
 
 	// For swap phase: track which hand card is selected for swapping
@@ -386,6 +390,8 @@
 					</button>
 				</div>
 			</div>
+		{:else if game_type === 'gin-rummy' && game_store.game_state}
+			<GinRummyGameTable on_leave={handle_leave} />
 		{:else if gs}
 			<!-- Game Table (CSS Grid) -->
 			<div class="game-table bg-green-900">

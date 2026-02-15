@@ -11,10 +11,10 @@ import type {
 import { Room_manager } from '@shead/game-engine'
 import type { Game_room } from '@shead/game-engine'
 import { create_deck } from '@shead/shared'
-import type { Shithead_state, Shithead_command } from '@shead/games'
 import { is_bot_player } from '@shead/games'
 import { readFileSync } from 'node:fs'
 import { Bot_controller } from './bot_controller'
+import { get_bot_fn } from './bot_registry'
 import { logger } from './logger'
 
 const game_config: Record<string, unknown> = (() => {
@@ -371,7 +371,7 @@ export function create_socket_server(
       broadcast_lobby_update(room)
     })
 
-    socket.on('lobby:practice', (difficulty, bot_count, ack) => {
+    socket.on('lobby:practice', (game_type, difficulty, bot_count, ack) => {
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
@@ -393,15 +393,22 @@ export function create_socket_server(
         s.room_id = null
       }
 
-      // Practice rooms use default config (ignore game_config which may have a small deck)
-      const room = room_manager.create_room('shithead', {})
-      if (!room) {
-        ack({ ok: false, reason: 'Failed to create room' })
+      const bot_fn = get_bot_fn(game_type)
+      if (!bot_fn) {
+        ack({ ok: false, reason: `No bot available for game type: ${game_type}` })
         return
       }
 
-      // Clamp bot_count to 1-3
-      const count = Math.max(1, Math.min(3, Math.floor(bot_count) || 1))
+      // Practice rooms use default config (ignore game_config which may have a small deck)
+      const room = room_manager.create_room(game_type, {})
+      if (!room) {
+        ack({ ok: false, reason: `Unknown game type: ${game_type}` })
+        return
+      }
+
+      // Clamp bot_count based on game's max_players
+      const max_bots = room.definition.max_players - 1
+      const count = Math.max(1, Math.min(max_bots, Math.floor(bot_count) || 1))
       const difficulty_label = difficulty === 'easy' ? '' : difficulty === 'medium' ? ' (Med)' : ' (Hard)'
       const bot_ids: string[] = []
 
@@ -433,8 +440,7 @@ export function create_socket_server(
         return
       }
 
-      const typed_room = room as unknown as Game_room<Shithead_state, Shithead_command, unknown>
-      const controller = new Bot_controller(typed_room, bot_ids, difficulty)
+      const controller = new Bot_controller(room, bot_ids, difficulty, bot_fn)
       bot_controllers.set(room.id, controller)
 
       ack({ ok: true, room: get_lobby_state(room), player_token: s.token })
@@ -461,15 +467,15 @@ export function create_socket_server(
       ack(result)
     })
 
-    // Debug: skip to face-down phase for the calling player
+    // Debug: skip to face-down phase for the calling player (shithead only)
     socket.on('debug:face_down_test' as any, (ack: any) => {
       const s = socket_sessions.get(socket.id)
       if (!s || !s.room_id) { ack?.({ ok: false }); return }
 
-      const room = room_manager.get_room(s.room_id) as Game_room<Shithead_state, any, any> | undefined
-      if (!room) { ack?.({ ok: false }); return }
+      const room = room_manager.get_room(s.room_id)
+      if (!room || room.definition.id !== 'shithead') { ack?.({ ok: false }); return }
 
-      const state = room._debug_get_state()
+      const state = room._debug_get_state() as any
       if (!state) { ack?.({ ok: false }); return }
 
       // Build some known cards for face-up/face-down
@@ -521,7 +527,8 @@ export function create_socket_server(
   const rooms_with_listeners = new Set<string>()
 
   function debug_log_state(room: Game_room<unknown, Base_command, unknown>): void {
-    const state = room.get_state() as Shithead_state | null
+    if (room.definition.id !== 'shithead') return
+    const state = room.get_state() as any
     if (!state || state.phase !== 'play') return
 
     const action = state.last_action?.description ?? ''
@@ -532,9 +539,9 @@ export function create_socket_server(
     for (const [pid, ps] of state.players) {
       const name = room.get_players().find(p => p.id === pid)?.name ?? pid
       players[name] = {
-        hand: ps.hand.map(c => c.rank).join(', '),
-        face_up: ps.face_up.map(c => c.rank).join(', '),
-        face_down: ps.face_down.map(c => c.rank).join(', '),
+        hand: ps.hand.map((c: any) => c.rank).join(', '),
+        face_up: ps.face_up.map((c: any) => c.rank).join(', '),
+        face_down: ps.face_down.map((c: any) => c.rank).join(', '),
       }
     }
 
@@ -542,7 +549,7 @@ export function create_socket_server(
       room: room.id,
       action,
       turn: current_name,
-      pile: state.discard_pile.slice(-3).map(c => c.rank),
+      pile: state.discard_pile.slice(-3).map((c: any) => c.rank),
       pile_size: state.discard_pile.length,
       deck: state.deck.length,
       players,

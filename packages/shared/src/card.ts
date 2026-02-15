@@ -72,6 +72,18 @@ export const RANK_VALUES: Record<Rank, number> = {
   '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
 }
 
+/** Gin rummy point values: A=1, face cards=10, others=face value */
+export const GIN_RUMMY_POINT_VALUES: Record<Rank, number> = {
+  'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
+  '8': 8, '9': 9, '10': 10, 'J': 10, 'Q': 10, 'K': 10,
+}
+
+/** Gin rummy rank order for run detection: A=1, 2=2, ..., K=13 */
+export const GIN_RANK_ORDER: Record<Rank, number> = {
+  'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
+  '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13,
+}
+
 export function sort_cards(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
 }

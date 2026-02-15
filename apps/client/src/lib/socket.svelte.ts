@@ -35,7 +35,7 @@ export let reconnecting = $state({ value: false })
 if (browser) {
   // Debug helpers — run from browser console
   ;(window as any).shead_debug = () => {
-    const gs = game_store.game_state
+    const gs = game_store.game_state as any
     console.table({
       connected: connection_store.connected,
       player_id: connection_store.player_id,
@@ -44,7 +44,7 @@ if (browser) {
       session_token: sessionStorage.getItem(TOKEN_KEY) ? '(set)' : '(empty)',
       reconnecting: reconnecting.value,
       ready_players: gs ? JSON.stringify(gs.ready_players) : 'no game state',
-      am_in_ready_list: gs ? gs.ready_players.includes(connection_store.player_id) : 'no game state',
+      am_in_ready_list: gs ? gs.ready_players?.includes(connection_store.player_id) : 'no game state',
       phase: gs?.phase ?? 'no game state',
       current_player: gs?.current_player ?? 'no game state',
     })
@@ -78,7 +78,7 @@ if (browser) {
             lobby_store.room = result.room
           }
           if (result.game_state) {
-            game_store.game_state = result.game_state as typeof game_store.game_state
+            game_store.game_state = result.game_state
           }
         } else {
           // Token invalid — clear it
@@ -113,13 +113,13 @@ if (browser) {
   })
 
   socket.on('game:state', (state: unknown) => {
-    const prev = game_store.game_state
-    const next = state as typeof game_store.game_state
+    const prev = game_store.game_state as any
+    const next = state as any
     game_store.game_state = next
     game_store.error_message = null
 
-    // Sound effects based on state changes
-    if (next && prev) {
+    // Sound effects based on state changes (shithead-specific)
+    if (next && prev && lobby_store.room?.game_type === 'shithead') {
       if (next.last_effect === 'burn' && prev.last_effect !== 'burn') {
         play_sound('burn')
       } else if (next.last_effect === 'skip' && prev.last_effect !== 'skip') {
@@ -132,6 +132,16 @@ if (browser) {
           play_sound('your_turn')
         } else {
           play_sound('card_play')
+        }
+      }
+    }
+
+    // Generic turn sound for other games
+    if (next && prev && lobby_store.room?.game_type !== 'shithead') {
+      if (next.current_player !== prev.current_player) {
+        const my_id = connection_store.player_id
+        if (next.current_player === my_id) {
+          play_sound('your_turn')
         }
       }
     }
@@ -168,9 +178,10 @@ export function set_name(name: string): Promise<void> {
   })
 }
 
-export function create_room(): Promise<Lobby_state> {
+export function create_room(game_type: string = 'shithead'): Promise<Lobby_state> {
+  const max_players = game_type === 'gin-rummy' ? 2 : 5
   return new Promise((resolve, reject) => {
-    socket.emit('lobby:create', { game_type: 'shithead', max_players: 5 }, (result) => {
+    socket.emit('lobby:create', { game_type, max_players }, (result) => {
       if (result.ok) {
         lobby_store.room = result.room
         sessionStorage.setItem(TOKEN_KEY, result.player_token)
@@ -235,14 +246,14 @@ export function start_game(): Promise<void> {
   })
 }
 
-export function practice_vs_bot(difficulty: 'easy' | 'medium' | 'hard' = 'easy', bot_count: number = 1): Promise<Lobby_state> {
+export function practice_vs_bot(game_type: string = 'shithead', difficulty: 'easy' | 'medium' | 'hard' = 'easy', bot_count: number = 1): Promise<Lobby_state> {
   return new Promise((resolve, reject) => {
     // Clear stale state from any previous game
     game_store.game_state = null
     game_store.selected_card_ids = []
     game_store.scores = null
     game_store.error_message = null
-    socket.emit('lobby:practice', difficulty, bot_count, (result) => {
+    socket.emit('lobby:practice', game_type, difficulty, bot_count, (result) => {
       if (result.ok) {
         lobby_store.room = result.room
         sessionStorage.setItem(TOKEN_KEY, result.player_token)
