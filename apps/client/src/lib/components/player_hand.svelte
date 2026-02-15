@@ -99,7 +99,7 @@
 							{card}
 							selected={selected_card_ids.includes(card.id)}
 							disabled={is_current_turn && !playable_card_ids.has(card.id)}
-							onclick={is_current_turn ? () => on_card_click(card.id, 'hand') : undefined}
+							onclick={phase === 'play' ? () => on_card_click(card.id, 'hand') : undefined}
 						/>
 					</div>
 				{/each}
@@ -119,7 +119,7 @@
 								{card}
 								selected={selected_card_ids.includes(card.id)}
 								disabled={hand.length > 0 || (is_current_turn && !playable_card_ids.has(card.id))}
-								onclick={show_face_up_active && is_current_turn ? () => on_card_click(card.id, 'face_up') : undefined}
+								onclick={show_face_up_active && phase === 'play' ? () => on_card_click(card.id, 'face_up') : undefined}
 							/>
 						</div>
 					{/each}

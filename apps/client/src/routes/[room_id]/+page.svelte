@@ -97,6 +97,25 @@
 		return source.some(card => can_play_on(card, gs.discard_pile))
 	})
 
+	const can_complete_four_of_a_kind = $derived.by(() => {
+		if (!gs || gs.phase !== 'play' || is_my_turn) return false
+		const ids = game_store.selected_card_ids
+		if (ids.length === 0) return false
+		const own = gs.own_state
+		const all_cards = [...own.hand, ...own.face_up]
+		const cards = ids.map(id => all_cards.find(c => c.id === id)).filter(Boolean) as typeof all_cards
+		if (cards.length !== ids.length) return false
+		if (cards.length === 0) return false
+		const rank = cards[0].rank
+		if (!cards.every(c => c.rank === rank)) return false
+		let pile_matching = 0
+		for (let i = gs.discard_pile.length - 1; i >= 0; i--) {
+			if (gs.discard_pile[i].rank === rank) pile_matching++
+			else break
+		}
+		return pile_matching + cards.length >= 4
+	})
+
 	const current_player_name = $derived(() => {
 		if (!gs || !room) return ''
 		const player = room.players.find(p => p.id === gs.current_player)
@@ -150,9 +169,8 @@
 
 	// --- Play Phase ---
 	async function handle_play_card_click(card_id: string, source: 'hand' | 'face_up' | 'face_down') {
-		if (!is_my_turn) return
-
 		if (source === 'face_down') {
+			if (!is_my_turn) return
 			const index = parseInt(card_id.replace('face_down_', ''), 10)
 			if (Number.isNaN(index)) return
 			await send_command({ type: 'PLAY_FACE_DOWN', index })
@@ -313,6 +331,7 @@
 							current_player_name={current_player_name()}
 							is_my_turn={is_my_turn}
 							last_effect={gs.last_effect}
+							last_action_text={gs.last_action ? `${get_player_name(gs.last_action.player_id)} ${gs.last_action.description}` : null}
 							error_message={game_store.error_message}
 							on_dismiss_error={handle_dismiss_error}
 						/>
@@ -410,16 +429,16 @@
 							</button>
 							<span class="text-xs text-green-400">{ready_count}/{total_players} ready</span>
 						</div>
-					{:else if gs.phase === 'play' && is_my_turn}
+					{:else if gs.phase === 'play' && (is_my_turn || can_complete_four_of_a_kind)}
 						<div class="flex gap-2">
 							<button
 								onclick={handle_play}
 								disabled={game_store.selected_card_ids.length === 0}
-								class="rounded bg-blue-600 px-6 py-2 text-sm font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+								class="rounded {can_complete_four_of_a_kind && !is_my_turn ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-blue-600 hover:bg-blue-500'} px-6 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 							>
-								Play Card{game_store.selected_card_ids.length > 1 ? 's' : ''}
+								{can_complete_four_of_a_kind && !is_my_turn ? 'Complete Four of a Kind!' : `Play Card${game_store.selected_card_ids.length > 1 ? 's' : ''}`}
 							</button>
-							{#if !has_playable_card && gs.discard_pile.length > 0}
+							{#if is_my_turn && !has_playable_card && gs.discard_pile.length > 0}
 								<button
 									onclick={handle_pickup}
 									class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500"

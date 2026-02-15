@@ -27,6 +27,18 @@ function check_four_of_a_kind_burn(pile: Card[]): boolean {
   return all_same_rank(top_four)
 }
 
+function would_complete_four_of_a_kind(pile: Card[], cards: Card[]): boolean {
+  if (cards.length === 0) return false
+  const played_rank = cards[0].rank
+  if (!all_same_rank(cards)) return false
+  let pile_matching = 0
+  for (let i = pile.length - 1; i >= 0; i--) {
+    if (pile[i].rank === played_rank) pile_matching++
+    else break
+  }
+  return pile_matching + cards.length >= 4
+}
+
 function get_current_player(state: Shithead_state): string {
   return state.player_order[state.current_player_index]
 }
@@ -95,6 +107,7 @@ function clone_state(state: Shithead_state): Shithead_state {
     ready_players: new Set(state.ready_players),
     last_effect: state.last_effect,
     last_revealed_card: state.last_revealed_card,
+    last_action: state.last_action,
   }
 }
 
@@ -173,6 +186,7 @@ export const shithead_definition: Card_game_definition<
       ready_players: new Set(),
       last_effect: null,
       last_revealed_card: null,
+      last_action: null,
     }
   },
 
@@ -225,8 +239,43 @@ export const shithead_definition: Card_game_definition<
     }
 
     const current_player = get_current_player(state)
-    if (cmd.player_id !== current_player) {
-      return { valid: false, reason: 'Not your turn' }
+    const is_out_of_turn = cmd.player_id !== current_player
+
+    if (is_out_of_turn) {
+      // Only PLAY_CARD can be played out of turn, and only to complete four-of-a-kind
+      if (cmd.type !== 'PLAY_CARD') {
+        return { valid: false, reason: 'Not your turn' }
+      }
+
+      if (cmd.card_ids.length === 0) {
+        return { valid: false, reason: 'Not your turn' }
+      }
+
+      const source = get_playable_source(player_state)
+      // Can't play face-down out of turn
+      if (source === 'face_down') {
+        return { valid: false, reason: 'Not your turn' }
+      }
+
+      const available = source === 'hand' ? player_state.hand : player_state.face_up
+      const cards: Card[] = []
+      for (const card_id of cmd.card_ids) {
+        const card = available.find((c) => c.id === card_id)
+        if (!card) {
+          return { valid: false, reason: 'Not your turn' }
+        }
+        cards.push(card)
+      }
+
+      if (!all_same_rank(cards)) {
+        return { valid: false, reason: 'Not your turn' }
+      }
+
+      if (!would_complete_four_of_a_kind(state.discard_pile, cards)) {
+        return { valid: false, reason: 'Not your turn' }
+      }
+
+      return { valid: true }
     }
 
     if (cmd.type === 'PICK_UP_PILE') {
@@ -287,6 +336,7 @@ export const shithead_definition: Card_game_definition<
   apply_command(state: Shithead_state, cmd: Shithead_command): Shithead_state {
     const next = clone_state(state)
     next.last_revealed_card = null
+    next.last_action = null
     const ruleset = DEFAULT_RULESET
 
     if (cmd.type === 'PLAY_FACE_DOWN') {
@@ -297,6 +347,12 @@ export const shithead_definition: Card_game_definition<
 
       if (!can_play_on(card, next.discard_pile, ruleset)) {
         // Card can't be played — pick up pile + card into hand
+        const pile_top_card = top_card(next.discard_pile)
+        const pile_desc = pile_top_card ? pile_top_card.rank : 'the pile'
+        next.last_action = {
+          player_id: cmd.player_id,
+          description: `flipped a ${card.rank} but couldn't beat the ${pile_desc} — picked up the pile!`,
+        }
         ps.hand = [...ps.hand, ...next.discard_pile, card]
         next.discard_pile = []
         next.last_effect = null
@@ -305,8 +361,18 @@ export const shithead_definition: Card_game_definition<
       }
 
       // Card can be played — push to pile and apply effects
+      const was_four_of_a_kind = check_four_of_a_kind_burn([...next.discard_pile, card])
       next.discard_pile.push(card)
       apply_card_effect(next, card.rank, 1, ruleset)
+
+      if (next.last_effect === 'burn') {
+        const rule = ruleset[card.rank as keyof Ruleset]
+        if (rule?.on_play === 'burn') {
+          next.last_action = { player_id: cmd.player_id, description: `played a ${card.rank} and burned the pile!` }
+        } else if (was_four_of_a_kind) {
+          next.last_action = { player_id: cmd.player_id, description: `completed four of a kind — pile burned!` }
+        }
+      }
 
       // Check if the player is now out
       if (is_player_out(ps)) {
@@ -382,7 +448,25 @@ export const shithead_definition: Card_game_definition<
       const played_rank = top_card(next.discard_pile)?.rank
       const num_played = cmd.card_ids.length
       if (played_rank) {
+        const was_four_of_a_kind = check_four_of_a_kind_burn(next.discard_pile)
         apply_card_effect(next, played_rank, num_played, ruleset)
+
+        // Detect out-of-turn play (compare against original state, not next)
+        const is_out_of_turn = cmd.player_id !== state.player_order[state.current_player_index]
+
+        if (next.last_effect === 'burn') {
+          const rule = ruleset[played_rank as keyof Ruleset]
+          if (rule?.on_play === 'burn') {
+            next.last_action = { player_id: cmd.player_id, description: `played a ${played_rank} and burned the pile!` }
+          } else if (was_four_of_a_kind) {
+            next.last_action = { player_id: cmd.player_id, description: `completed four of a kind — pile burned!` }
+          }
+
+          // Out-of-turn four-of-a-kind: give turn to the completer
+          if (is_out_of_turn) {
+            next.current_player_index = next.player_order.indexOf(cmd.player_id)
+          }
+        }
       }
 
       // Draw back up to minimum hand size if below it
@@ -449,6 +533,7 @@ export const shithead_definition: Card_game_definition<
       ready_players: [...state.ready_players],
       last_effect: state.last_effect,
       last_revealed_card: state.last_revealed_card,
+      last_action: state.last_action,
     }
   },
 

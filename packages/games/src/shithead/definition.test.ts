@@ -69,6 +69,7 @@ function deal_deterministic(deck: Card[], players: Player[]): Shithead_state {
     ready_players: new Set(),
     last_effect: null,
     last_revealed_card: null,
+    last_action: null,
   }
 }
 
@@ -1483,6 +1484,244 @@ describe('shithead_definition', () => {
       const losers = Array.from(scores.values()).filter((s) => s === 0)
       expect(winners.length).toBeGreaterThanOrEqual(1)
       expect(losers).toHaveLength(1)
+    })
+  })
+
+  describe('play phase — out-of-turn four-of-a-kind completion', () => {
+    function setup_out_of_turn(
+      pile_cards: Card[],
+      p1_hand: Card[],
+      p2_hand: Card[],
+      options?: { deck?: Card[], p2_face_up?: Card[], p2_face_down?: Card[], p1_face_up?: Card[], p1_face_down?: Card[] },
+    ): Shithead_state {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      state.discard_pile = pile_cards
+      state.players.get('p1')!.hand = p1_hand
+      state.players.get('p2')!.hand = p2_hand
+      if (options?.deck !== undefined) state.deck = options.deck
+      if (options?.p2_face_up) state.players.get('p2')!.face_up = options.p2_face_up
+      if (options?.p2_face_down) state.players.get('p2')!.face_down = options.p2_face_down
+      if (options?.p1_face_up) state.players.get('p1')!.face_up = options.p1_face_up
+      if (options?.p1_face_down) state.players.get('p1')!.face_down = options.p1_face_down
+      return ready_all(state)
+    }
+
+    it('allows out-of-turn completion (3 on pile + 1 played)', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+      // p1 is current player, p2 plays out of turn
+      expect(state.player_order[state.current_player_index]).toBe('p1')
+
+      const result = shithead_definition.validate_command(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('rejects non-completing out-of-turn play', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '8'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      }, 'Not your turn')
+    })
+
+    it('rejects out-of-turn PICK_UP_PILE', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PICK_UP_PILE',
+      }, 'Not your turn')
+    })
+
+    it('rejects out-of-turn PLAY_FACE_DOWN', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [],
+        { p2_face_up: [], p2_face_down: [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')] },
+      )
+
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
+      }, 'Not your turn')
+    })
+
+    it('burns pile and gives turn to completer', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      const next = apply(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      })
+
+      expect(next.discard_pile).toHaveLength(0)
+      expect(next.last_effect).toBe('burn')
+      expect(next.player_order[next.current_player_index]).toBe('p2')
+    })
+
+    it('sets correct last_action for four-of-a-kind', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      const next = apply(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      })
+
+      expect(next.last_action).not.toBeNull()
+      expect(next.last_action!.description).toContain('four of a kind')
+    })
+
+    it('rejects when pile streak is too short (1 matching + 1 played != 4)', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      }, 'Not your turn')
+    })
+
+    it('allows 2 cards when pile has 2 matching (2+2=4)', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('clubs', '5'), make_card('diamonds', '9')],
+      )
+
+      const result = shithead_definition.validate_command(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id, state.players.get('p2')!.hand[1].id],
+      })
+      expect(result.valid).toBe(true)
+
+      const next = apply(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id, state.players.get('p2')!.hand[1].id],
+      })
+      expect(next.discard_pile).toHaveLength(0)
+      expect(next.last_effect).toBe('burn')
+      expect(next.player_order[next.current_player_index]).toBe('p2')
+    })
+
+    it('player draws from deck after out-of-turn play', () => {
+      const extra_cards = [make_card('hearts', '4'), make_card('diamonds', '4'), make_card('clubs', '4')]
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+        { deck: extra_cards },
+      )
+
+      const next = apply(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      })
+
+      // p2 played 1 card from hand (3 → 2), should draw 1 from deck to stay at 3
+      expect(next.players.get('p2')!.hand).toHaveLength(3)
+      expect(next.deck).toHaveLength(2)
+    })
+
+    it('out-of-turn that empties all cards removes player', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5')],
+        { deck: [], p2_face_up: [], p2_face_down: [] },
+      )
+
+      const next = apply(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      })
+
+      // 2-player game: p2 goes out → game finished
+      expect(next.phase).toBe('finished')
+    })
+
+    it('rejects face_up when hand not empty (out of turn)', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('hearts', '8'), make_card('diamonds', '9'), make_card('clubs', 'J')],
+        { p2_face_up: [make_card('spades', '5'), make_card('hearts', '6'), make_card('diamonds', '7')] },
+      )
+
+      // p2 has hand cards, so face_up card should not be found
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.face_up[0].id],
+      }, 'Not your turn')
+    })
+
+    it('allows face_up when hand is empty (out of turn)', () => {
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', '5')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [],
+        { deck: [], p2_face_up: [make_card('spades', '5'), make_card('hearts', '6'), make_card('diamonds', '7')], p2_face_down: [] },
+      )
+
+      const result = shithead_definition.validate_command(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.face_up[0].id],
+      })
+      expect(result.valid).toBe(true)
+    })
+
+    it('rejects when pile top rank does not match (broken streak)', () => {
+      // Pile: [5, 5, K] — the K breaks the streak, so playing a 5 only has 0 matching from top
+      const state = setup_out_of_turn(
+        [make_card('hearts', '5'), make_card('diamonds', '5'), make_card('clubs', 'K')],
+        [make_card('hearts', 'K'), make_card('clubs', 'K'), make_card('spades', 'A')],
+        [make_card('spades', '5'), make_card('hearts', '8'), make_card('diamonds', '9')],
+      )
+
+      expect_invalid(state, {
+        player_id: 'p2',
+        type: 'PLAY_CARD',
+        card_ids: [state.players.get('p2')!.hand[0].id],
+      }, 'Not your turn')
     })
   })
 })

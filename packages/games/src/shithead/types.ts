@@ -18,6 +18,7 @@ export interface Shithead_state {
   ready_players: Set<string>
   last_effect: 'burn' | 'reverse' | 'skip' | null
   last_revealed_card: Card | null
+  last_action: { player_id: string; description: string } | null
 }
 
 export type Shithead_command = Base_command &
@@ -67,4 +68,5 @@ export interface Visible_shithead_state {
   ready_players: string[]
   last_effect: 'burn' | 'reverse' | 'skip' | null
   last_revealed_card: Card | null
+  last_action: { player_id: string; description: string } | null
 }
