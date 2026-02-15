@@ -1612,7 +1612,7 @@ describe('shithead_definition', () => {
       })
 
       expect(next.last_action).not.toBeNull()
-      expect(next.last_action!.description).toContain('four of a kind')
+      expect(next.last_action!.description).toContain('four 5s')
     })
 
     it('rejects when pile streak is too short (1 matching + 1 played != 4)', () => {

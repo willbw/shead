@@ -8,3 +8,4 @@ build
 .env.*
 !.env.example
 .DS_Store
+apps/server/game_config.json

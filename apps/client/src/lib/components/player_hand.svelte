@@ -47,7 +47,7 @@
 
 	const show_hand = $derived(hand.length > 0)
 	const show_face_up_active = $derived(hand.length === 0 && face_up.length > 0)
-	const show_face_down = $derived(hand.length === 0 && face_up.length === 0 && face_down_count > 0)
+	const face_down_playable = $derived(hand.length === 0 && face_up.length === 0 && face_down_count > 0)
 </script>
 
 <div class="flex flex-col items-center gap-2">
@@ -127,14 +127,17 @@
 			</div>
 		{/if}
 
-		<!-- Face-down: only show when hand and face-up are both empty -->
-		{#if show_face_down}
+		<!-- Face-down: always visible, small until they're the active source -->
+		{#if face_down_count > 0}
 			<div class="flex flex-col items-center gap-1">
-				<span class="text-xs text-gray-400 uppercase">Face Down ({face_down_count})</span>
+				{#if face_down_playable}
+					<span class="text-xs text-gray-400 uppercase">Face Down ({face_down_count})</span>
+				{/if}
 				<div class="flex gap-1">
 					{#each { length: face_down_count } as _, i (i)}
 						<CardBack
-							onclick={is_current_turn ? () => on_card_click(`face_down_${i}`, 'face_down') : undefined}
+							small={!face_down_playable}
+							onclick={is_current_turn && face_down_playable ? () => on_card_click(`face_down_${i}`, 'face_down') : undefined}
 						/>
 					{/each}
 				</div>

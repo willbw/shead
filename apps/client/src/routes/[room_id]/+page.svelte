@@ -118,6 +118,26 @@
 		return pile_matching + cards.length >= 4
 	})
 
+	// Detect if it's our turn and we can complete a four-of-a-kind from our cards
+	const four_of_a_kind_cards = $derived.by((): Card[] | null => {
+		if (!gs || gs.phase !== 'play' || !is_my_turn) return null
+		if (gs.discard_pile.length === 0) return null
+		const pile = gs.discard_pile
+		const top_rank = pile[pile.length - 1].rank
+		let pile_count = 0
+		for (let i = pile.length - 1; i >= 0; i--) {
+			if (pile[i].rank === top_rank) pile_count++
+			else break
+		}
+		if (pile_count >= 4) return null // already burned
+		const needed = 4 - pile_count
+		const own = gs.own_state
+		const source = own.hand.length > 0 ? own.hand : own.face_up
+		const matching = source.filter(c => c.rank === top_rank && can_play_on(c, pile))
+		if (matching.length >= needed) return matching.slice(0, needed)
+		return null
+	})
+
 	const current_player_name = $derived(() => {
 		if (!gs || !room) return ''
 		const player = room.players.find(p => p.id === gs.current_player)
@@ -227,6 +247,12 @@
 
 	async function handle_pickup() {
 		await send_command({ type: 'PICK_UP_PILE' })
+		game_store.selected_card_ids = []
+	}
+
+	async function handle_connect_four() {
+		if (!four_of_a_kind_cards) return
+		await send_command({ type: 'PLAY_CARD', card_ids: four_of_a_kind_cards.map(c => c.id) })
 		game_store.selected_card_ids = []
 	}
 
@@ -483,6 +509,14 @@
 							>
 								{can_complete_four_of_a_kind && !is_my_turn ? 'Complete Four of a Kind!' : `Play Card${game_store.selected_card_ids.length > 1 ? 's' : ''}`}
 							</button>
+							{#if is_my_turn && four_of_a_kind_cards}
+								<button
+									onclick={handle_connect_four}
+									class="rounded bg-yellow-600 px-6 py-2 text-sm font-medium hover:bg-yellow-500"
+								>
+									Connect 4!
+								</button>
+							{/if}
 							{#if is_my_turn && !has_playable_card && gs.discard_pile.length > 0 && (gs.own_state.hand.length > 0 || gs.own_state.face_up.length > 0)}
 								<button
 									onclick={handle_pickup}

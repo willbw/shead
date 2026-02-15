@@ -35,6 +35,7 @@ export interface Shithead_config {
   num_face_down: number
   num_face_up: number
   num_hand: number
+  deck_size?: number
   ruleset?: Ruleset
 }
 

@@ -158,7 +158,17 @@ export const shithead_definition: Card_game_definition<
 
   initial_state(config: Shithead_config, players: Player[]): Shithead_state {
     const cfg = { ...DEFAULT_SHITHEAD_CONFIG, ...config }
-    const deck = shuffle(create_deck())
+    const full_deck = shuffle(create_deck())
+    const cards_per_player = cfg.num_face_down + cfg.num_face_up + cfg.num_hand
+    const min_deck = cards_per_player * players.length
+    const size = cfg.deck_size ?? 52
+    if (size < min_deck) {
+      throw new Error(`deck_size ${size} too small for ${players.length} players (need at least ${min_deck})`)
+    }
+    if (size > 52) {
+      throw new Error(`deck_size ${size} exceeds maximum of 52`)
+    }
+    const deck = size < 52 ? full_deck.slice(0, size) : full_deck
     const player_map = new Map<string, { hand: Card[]; face_up: Card[]; face_down: Card[] }>()
     let deck_index = 0
 
@@ -379,7 +389,7 @@ export const shithead_definition: Card_game_definition<
         if (rule?.on_play === 'burn') {
           next.last_action = { player_id: cmd.player_id, description: `played a ${card.rank} and burned the pile!` }
         } else if (was_four_of_a_kind) {
-          next.last_action = { player_id: cmd.player_id, description: `completed four of a kind — pile burned!` }
+          next.last_action = { player_id: cmd.player_id, description: `completed four ${card.rank}s — pile burned!` }
         }
       }
 
@@ -476,7 +486,7 @@ export const shithead_definition: Card_game_definition<
           if (rule?.on_play === 'burn') {
             next.last_action = { player_id: cmd.player_id, description: `played a ${played_rank} and burned the pile!` }
           } else if (was_four_of_a_kind) {
-            next.last_action = { player_id: cmd.player_id, description: `completed four of a kind — pile burned!` }
+            next.last_action = { player_id: cmd.player_id, description: `completed four ${played_rank}s — pile burned!` }
           }
 
           // Out-of-turn four-of-a-kind: give turn to the completer

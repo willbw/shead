@@ -13,7 +13,18 @@ import type { Game_room } from '@shead/game-engine'
 import { create_deck } from '@shead/shared'
 import type { Shithead_state, Shithead_command } from '@shead/games'
 import { is_bot_player } from '@shead/games'
+import { readFileSync } from 'node:fs'
 import { Bot_controller } from './bot_controller'
+import { logger } from './logger'
+
+const game_config: Record<string, unknown> = (() => {
+  try {
+    const raw = readFileSync('game_config.json', 'utf-8')
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
+})()
 
 type Typed_server = Server<Client_to_server_events, Server_to_client_events>
 type Typed_socket = Socket<Client_to_server_events, Server_to_client_events>
@@ -259,7 +270,7 @@ export function create_socket_server(
       const s = socket_sessions.get(socket.id)
       if (!s) { ack({ ok: false, reason: 'No session' }); return }
 
-      const room = room_manager.create_room(opts.game_type, {})
+      const room = room_manager.create_room(opts.game_type, game_config)
       if (!room) {
         ack({ ok: false, reason: `Unknown game type: ${opts.game_type}` })
         return
@@ -382,7 +393,7 @@ export function create_socket_server(
         s.room_id = null
       }
 
-      const room = room_manager.create_room('shithead', {})
+      const room = room_manager.create_room('shithead', game_config)
       if (!room) {
         ack({ ok: false, reason: 'Failed to create room' })
         return
@@ -490,12 +501,42 @@ export function create_socket_server(
   // Track which rooms already have listeners to avoid duplicates
   const rooms_with_listeners = new Set<string>()
 
+  function debug_log_state(room: Game_room<unknown, Base_command, unknown>): void {
+    const state = room.get_state() as Shithead_state | null
+    if (!state || state.phase !== 'play') return
+
+    const action = state.last_action?.description ?? ''
+    const current = state.player_order[state.current_player_index]
+    const current_name = room.get_players().find(p => p.id === current)?.name ?? current
+
+    const players: Record<string, { hand: string; face_up: string; face_down: string }> = {}
+    for (const [pid, ps] of state.players) {
+      const name = room.get_players().find(p => p.id === pid)?.name ?? pid
+      players[name] = {
+        hand: ps.hand.map(c => c.rank).join(', '),
+        face_up: ps.face_up.map(c => c.rank).join(', '),
+        face_down: ps.face_down.map(c => c.rank).join(', '),
+      }
+    }
+
+    logger.info({
+      room: room.id,
+      action,
+      turn: current_name,
+      pile: state.discard_pile.slice(-3).map(c => c.rank),
+      pile_size: state.discard_pile.length,
+      deck: state.deck.length,
+      players,
+    }, `${action ? action + ' | ' : ''}${current_name}'s turn`)
+  }
+
   function setup_room_listeners(room: Game_room<unknown, Base_command, unknown>): void {
     if (rooms_with_listeners.has(room.id)) return
     rooms_with_listeners.add(room.id)
 
     room.on((event) => {
       if (event.type === 'state_changed') {
+        debug_log_state(room)
         broadcast_game_state(room)
       }
       if (event.type === 'game_over') {
