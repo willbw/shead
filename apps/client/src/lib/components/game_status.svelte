@@ -6,12 +6,12 @@
 		current_player_name: string
 		is_my_turn: boolean
 		last_effect: 'burn' | 'reverse' | 'skip' | null
-		last_action_text: string | null
+		action_log: string[]
 		error_message: string | null
 		on_dismiss_error?: () => void
 	}
 
-	let { phase, current_player_name, is_my_turn, last_effect, last_action_text, error_message, on_dismiss_error }: Props = $props()
+	let { phase, current_player_name, is_my_turn, last_effect, action_log, error_message, on_dismiss_error }: Props = $props()
 
 	// Auto-dismiss error after 3s
 	let error_timer: ReturnType<typeof setTimeout> | undefined
@@ -45,8 +45,12 @@
 		<span class="text-xs font-semibold text-purple-500" transition:scale={{ duration: 300 }}>Skip!</span>
 	{/if}
 
-	{#if last_action_text}
-		<span class="text-xs text-gray-300 italic">{last_action_text}</span>
+	{#if action_log.length > 0}
+		<div class="flex flex-col items-center">
+			{#each action_log as text, i (text + i)}
+				<span class="text-xs italic {i === action_log.length - 1 ? 'text-gray-300' : 'text-gray-500'}">{text}</span>
+			{/each}
+		</div>
 	{/if}
 
 	{#if error_message}

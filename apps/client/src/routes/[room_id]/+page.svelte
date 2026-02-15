@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte'
 	import { goto } from '$app/navigation'
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
@@ -138,6 +139,22 @@
 	function get_player_name(id: string): string {
 		return room?.players.find(p => p.id === id)?.name ?? id.slice(0, 6)
 	}
+
+	// Rolling action log — keeps last N actions where N = player count
+	let action_log = $state<string[]>([])
+	let prev_action_id = ''
+	$effect(() => {
+		if (!gs?.last_action) return
+		const raw = `${get_player_name(gs.last_action.player_id)} ${gs.last_action.description}`
+		// Deduplicate: build a key from game state that changes each move
+		const action_id = `${gs.current_player}:${gs.discard_pile.length}:${gs.deck_count}:${raw}`
+		untrack(() => {
+			if (action_id === prev_action_id) return
+			prev_action_id = action_id
+			const max = gs!.player_order.length
+			action_log = [...action_log, raw].slice(-max)
+		})
+	})
 
 	// --- Swap Phase ---
 	function handle_swap_card_click(card_id: string, source: 'hand' | 'face_up' | 'face_down') {
@@ -354,7 +371,7 @@
 							current_player_name={current_player_name()}
 							is_my_turn={is_my_turn}
 							last_effect={gs.last_effect}
-							last_action_text={gs.last_action ? `${get_player_name(gs.last_action.player_id)} ${gs.last_action.description}` : null}
+							action_log={action_log}
 							error_message={game_store.error_message}
 							on_dismiss_error={handle_dismiss_error}
 						/>

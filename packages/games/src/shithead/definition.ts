@@ -361,6 +361,7 @@ export const shithead_definition: Card_game_definition<
       }
 
       // Card can be played — push to pile and apply effects
+      next.last_action = { player_id: cmd.player_id, description: `flipped a ${card.rank}` }
       const was_four_of_a_kind = check_four_of_a_kind_burn([...next.discard_pile, card])
       next.discard_pile.push(card)
       apply_card_effect(next, card.rank, 1, ruleset)
@@ -416,6 +417,7 @@ export const shithead_definition: Card_game_definition<
 
     if (cmd.type === 'PICK_UP_PILE') {
       const ps = next.players.get(cmd.player_id)!
+      next.last_action = { player_id: cmd.player_id, description: `picked up the pile (${next.discard_pile.length} cards)` }
       ps.hand = [...ps.hand, ...next.discard_pile]
       next.discard_pile = []
       next.last_effect = null
@@ -443,6 +445,13 @@ export const shithead_definition: Card_game_definition<
       }
 
       next.discard_pile.push(...played_cards)
+
+      const rank_label = played_cards[0].rank
+      if (played_cards.length > 1) {
+        next.last_action = { player_id: cmd.player_id, description: `played ${played_cards.length}x ${rank_label}` }
+      } else {
+        next.last_action = { player_id: cmd.player_id, description: `played a ${rank_label}` }
+      }
 
       // Apply card effects via ruleset
       const played_rank = top_card(next.discard_pile)?.rank
