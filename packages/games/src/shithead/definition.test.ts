@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Card, Player } from '@shead/shared'
+import type { Card, Player, Rank } from '@shead/shared'
 import { RANKS, SUITS, Direction } from '@shead/shared'
 import { shithead_definition } from './definition'
 import type { Shithead_command, Shithead_state, Visible_shithead_state } from './types'
@@ -766,6 +766,123 @@ describe('shithead_definition', () => {
     })
   })
 
+  describe('play phase — source enforcement', () => {
+    it('rejects playing face-up card when hand is not empty', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = [make_card('hearts', 'A')]
+      ps.face_up = [make_card('diamonds', 'K'), make_card('clubs', 'Q'), make_card('spades', 'J')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      expect_invalid(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [ps.face_up[0].id],
+      }, 'not found')
+    })
+
+    it('allows playing face-up card when hand is empty', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = []
+      ps.face_up = [make_card('diamonds', 'K'), make_card('clubs', 'Q'), make_card('spades', 'J')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [ps.face_up[0].id],
+      })
+
+      expect(next.players.get('p1')!.face_up).toHaveLength(2)
+      expect(next.discard_pile).toContainEqual(make_card('diamonds', 'K'))
+    })
+
+    it('rejects PLAY_FACE_DOWN when face-up cards remain', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      ps.hand = []
+      ps.face_up = [make_card('diamonds', 'K')]
+      ps.face_down = [make_card('hearts', '3')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      expect_invalid(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_FACE_DOWN',
+        index: 0,
+      }, 'hand and face-up are empty')
+    })
+
+    it('rejects playing hand card from face-up source', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      const hand_card = make_card('hearts', 'A')
+      ps.hand = []
+      ps.face_up = [make_card('diamonds', 'K'), make_card('clubs', 'Q'), hand_card]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      // Remove the card from face_up and put it in hand to simulate mismatch
+      const ps2 = play_state.players.get('p1')!
+      ps2.hand = [hand_card]
+      ps2.face_up = [make_card('diamonds', 'K'), make_card('clubs', 'Q')]
+
+      // Should reject face_up cards since hand is not empty
+      expect_invalid(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [make_card('diamonds', 'K').id],
+      }, 'not found')
+    })
+
+    it('apply_command removes card from hand only when source is hand', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      const card = make_card('hearts', 'A')
+      ps.hand = [card, make_card('clubs', 'K'), make_card('spades', 'Q')]
+      ps.face_up = [make_card('diamonds', '5'), make_card('diamonds', '6'), make_card('diamonds', '7')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [card.id],
+      })
+
+      expect(next.players.get('p1')!.hand).toHaveLength(2)
+      expect(next.players.get('p1')!.face_up).toHaveLength(3) // untouched
+    })
+
+    it('apply_command removes card from face-up only when source is face_up', () => {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      const ps = state.players.get('p1')!
+      const card = make_card('diamonds', 'K')
+      ps.hand = []
+      ps.face_up = [card, make_card('clubs', 'Q'), make_card('spades', 'J')]
+      state.deck = []
+      const play_state = ready_all(state)
+
+      const next = apply(play_state, {
+        player_id: 'p1',
+        type: 'PLAY_CARD',
+        card_ids: [card.id],
+      })
+
+      expect(next.players.get('p1')!.face_up).toHaveLength(2)
+      expect(next.players.get('p1')!.hand).toHaveLength(0) // still empty
+    })
+  })
+
   describe('game over', () => {
     it('detects when a player goes out', () => {
       const deck = create_ordered_deck()
@@ -1106,27 +1223,25 @@ describe('shithead_definition', () => {
       expect(result.valid).toBe(true)
     })
 
-    it('2 and 10 are still playable on a 9', () => {
+    it('2 and 10 are not playable on a 9 (both even)', () => {
       const state = setup_with_pile_and_hand(
         [make_card('hearts', '9')],
-        [make_card('diamonds', '2'), make_card('clubs', '10'), make_card('spades', 'A')],
+        [make_card('diamonds', '2'), make_card('clubs', '10'), make_card('spades', '5')],
       )
 
-      // 2 should work (always playable)
-      const result_2 = shithead_definition.validate_command(state, {
+      // 2 should fail (even)
+      expect_invalid(state, {
         player_id: 'p1',
         type: 'PLAY_CARD',
         card_ids: [state.players.get('p1')!.hand[0].id],
-      })
-      expect(result_2.valid).toBe(true)
+      }, 'Cannot play')
 
-      // 10 should work (always playable)
-      const result_10 = shithead_definition.validate_command(state, {
+      // 10 should fail (even)
+      expect_invalid(state, {
         player_id: 'p1',
         type: 'PLAY_CARD',
         card_ids: [state.players.get('p1')!.hand[1].id],
-      })
-      expect(result_10.valid).toBe(true)
+      }, 'Cannot play')
     })
 
     it('Q reverses direction (3-player)', () => {
@@ -1184,6 +1299,72 @@ describe('shithead_definition', () => {
       expect(next.direction).toBe(Direction.CLOCKWISE)
       expect(next.player_order[next.current_player_index]).toBe('p2')
       expect(next.last_effect).toBe(null)
+    })
+  })
+
+  describe('playable ranks per pile top', () => {
+    const ALL_RANKS: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+
+    function playable_ranks_on(pile_top_rank: Rank): Rank[] {
+      const pile = [make_card('hearts', pile_top_rank)]
+      return ALL_RANKS.filter(rank => {
+        const card = make_card('spades', rank)
+        const result = shithead_definition.validate_command(
+          setup_for_rank_test(pile, [card]),
+          { player_id: 'p1', type: 'PLAY_CARD', card_ids: [card.id] },
+        )
+        return result.valid
+      })
+    }
+
+    function playable_ranks_on_empty(): Rank[] {
+      return ALL_RANKS.filter(rank => {
+        const card = make_card('spades', rank)
+        const result = shithead_definition.validate_command(
+          setup_for_rank_test([], [card]),
+          { player_id: 'p1', type: 'PLAY_CARD', card_ids: [card.id] },
+        )
+        return result.valid
+      })
+    }
+
+    function setup_for_rank_test(pile: Card[], hand: Card[]): Shithead_state {
+      const deck = create_ordered_deck()
+      const state = deal_deterministic(deck, PLAYERS)
+      state.discard_pile = pile
+      // Ensure hand has 3 cards for validity (pad with filler if needed)
+      const filler = [make_card('clubs', 'K'), make_card('diamonds', 'K')]
+      state.players.get('p1')!.hand = [...hand, ...filler.slice(0, Math.max(0, 3 - hand.length))]
+      state.deck = []
+      return ready_all(state)
+    }
+
+    it('empty pile accepts all ranks', () => {
+      expect(playable_ranks_on_empty()).toEqual(ALL_RANKS)
+    })
+
+    it('7 accepts ranks ≤ 7 and 10 (burn)', () => {
+      expect(playable_ranks_on('7')).toEqual(['2', '3', '4', '5', '6', '7', '10'])
+    })
+
+    it('9 accepts only odd ranks (3, 5, 7, 9)', () => {
+      expect(playable_ranks_on('9')).toEqual(['3', '5', '7', '9'])
+    })
+
+    it('5 accepts 5 and above plus 2, 3, 10', () => {
+      expect(playable_ranks_on('5')).toEqual(['2', '3', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'])
+    })
+
+    it('A accepts only A plus 2, 3, 10', () => {
+      expect(playable_ranks_on('A')).toEqual(['2', '3', '10', 'A'])
+    })
+
+    it('K accepts K and A plus 2, 3, 10', () => {
+      expect(playable_ranks_on('K')).toEqual(['2', '3', '10', 'K', 'A'])
+    })
+
+    it('2 accepts all ranks (pile reset)', () => {
+      expect(playable_ranks_on('2')).toEqual(ALL_RANKS)
     })
   })
 

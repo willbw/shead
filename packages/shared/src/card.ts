@@ -76,39 +76,56 @@ export function sort_cards(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
 }
 
-export const ODD_RANK_VALUES = new Set([3, 5, 7, 9])
+export interface Rank_rule {
+  /** The set of ranks that can be played when this rank is the effective pile top.
+   *  If absent, default applies: any rank with value >= this rank's value. */
+  playable_on_me?: Set<Rank>
 
-/** Find the effective top card, skipping 3s (invisible). */
-export function effective_top_card(pile: Card[]): Card | undefined {
+  /** Effect when this rank is played. */
+  on_play?: 'burn' | 'skip' | 'reverse' | 'invisible' | null
+
+  /** If true, this rank can always be played regardless of the pile top. */
+  always_playable?: boolean
+}
+
+export type Ruleset = Partial<Record<Rank, Rank_rule>>
+
+export const DEFAULT_RULESET: Ruleset = {
+  '2':  { playable_on_me: new Set(RANKS), always_playable: true },
+  '3':  { on_play: 'invisible' },
+  '7':  { playable_on_me: new Set(['2', '3', '4', '5', '6', '7', '10'] as Rank[]) },
+  '8':  { on_play: 'skip' },
+  '9':  { playable_on_me: new Set(['3', '5', '7', '9'] as Rank[]) },
+  '10': { on_play: 'burn', always_playable: true },
+  'Q':  { on_play: 'reverse' },
+}
+
+/** Find the effective top card, skipping ranks with 'invisible' on_play. */
+export function effective_top_card(pile: Card[], ruleset: Ruleset = DEFAULT_RULESET): Card | undefined {
   for (let i = pile.length - 1; i >= 0; i--) {
-    if (pile[i].rank !== '3') {
+    if (ruleset[pile[i].rank]?.on_play !== 'invisible') {
       return pile[i]
     }
   }
   return undefined
 }
 
-export function can_play_on(card: Card, pile: Card[]): boolean {
-  // 2 can always be played (reset)
-  if (card.rank === '2') return true
-  // 3 can always be played (invisible)
-  if (card.rank === '3') return true
-  // 10 can always be played (burns)
-  if (card.rank === '10') return true
+export function can_play_on(card: Card, pile: Card[], ruleset: Ruleset = DEFAULT_RULESET): boolean {
+  // Invisible cards can always be played (they pass through to the card below)
+  if (ruleset[card.rank]?.on_play === 'invisible') return true
 
-  const top = effective_top_card(pile)
+  const top = effective_top_card(pile, ruleset)
   if (!top) return true
 
-  // If effective top is a 7, must play rank ≤ 7
-  if (top.rank === '7') {
-    return RANK_VALUES[card.rank] <= 7
+  const top_rule = ruleset[top.rank]
+  // If the pile top explicitly declares which ranks can be played on it, use that
+  if (top_rule?.playable_on_me) {
+    return top_rule.playable_on_me.has(card.rank)
   }
 
-  // If effective top is a 9, must play odd rank (3,5,7,9)
-  if (top.rank === '9') {
-    return ODD_RANK_VALUES.has(RANK_VALUES[card.rank])
-  }
+  // Always-playable cards (e.g. 2 resets pile, 10 burns pile)
+  if (ruleset[card.rank]?.always_playable) return true
 
-  // Otherwise play equal or higher
+  // Default: play equal or higher
   return RANK_VALUES[card.rank] >= RANK_VALUES[top.rank]
 }

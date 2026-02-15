@@ -1,4 +1,4 @@
-import type { Base_command, Card } from '@shead/shared'
+import type { Base_command, Card, Ruleset } from '@shead/shared'
 import { Direction } from '@shead/shared'
 
 export interface Shithead_player_state {
@@ -34,6 +34,7 @@ export interface Shithead_config {
   num_face_down: number
   num_face_up: number
   num_hand: number
+  ruleset?: Ruleset
 }
 
 export const DEFAULT_SHITHEAD_CONFIG: Shithead_config = {

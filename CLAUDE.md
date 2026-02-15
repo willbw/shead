@@ -258,3 +258,8 @@ Run: `pnpm test` (all) or `cd packages/games && pnpm test` (specific package).
 - **The client's `Visible_shithead_state` is a copy** of the type from `@shead/games`. Keep them in sync manually.
 - **Build order matters.** Shared packages must build before dependents. `turbo build` handles this via `dependsOn: ["^build"]`. For `pnpm dev`, shared packages are built first, then apps start in dev/watch mode.
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`) are used instead of Svelte 4 stores. The `.svelte.ts` extension is required for files using runes outside of components.
+# Project Guidelines
+
+## Testing
+
+- Always add tests when fixing bugs. Tests should cover the fix and prevent regressions.

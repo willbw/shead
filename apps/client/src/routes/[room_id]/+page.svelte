@@ -3,7 +3,7 @@
 	import { connection_store } from '$lib/stores/connection.svelte'
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
-	import { effective_top_card } from '@shead/shared'
+	import { effective_top_card, can_play_on } from '@shead/shared'
 	import { connect, set_name, join_room, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
 	import { fly } from 'svelte/transition'
 	import CardComponent from '$lib/components/card.svelte'
@@ -89,6 +89,13 @@
 	let swap_hand_card_id = $state<string | null>(null)
 
 	const is_my_turn = $derived(gs ? gs.current_player === my_id : false)
+
+	const has_playable_card = $derived.by(() => {
+		if (!gs || gs.phase !== 'play') return false
+		const own = gs.own_state
+		const source = own.hand.length > 0 ? own.hand : own.face_up
+		return source.some(card => can_play_on(card, gs.discard_pile))
+	})
 
 	const current_player_name = $derived(() => {
 		if (!gs || !room) return ''
@@ -412,12 +419,14 @@
 							>
 								Play Card{game_store.selected_card_ids.length > 1 ? 's' : ''}
 							</button>
-							<button
-								onclick={handle_pickup}
-								class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500"
-							>
-								Pick Up Pile
-							</button>
+							{#if !has_playable_card && gs.discard_pile.length > 0}
+								<button
+									onclick={handle_pickup}
+									class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500"
+								>
+									Pick Up Pile
+								</button>
+							{/if}
 						</div>
 					{/if}
 				</div>

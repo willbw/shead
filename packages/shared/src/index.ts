@@ -1,4 +1,4 @@
-export { type Suit, type Rank, type Card, type Joker, type Game_card, Direction, SUITS, RANKS, create_deck, create_deck_with_jokers, shuffle, RANK_VALUES, ODD_RANK_VALUES, sort_cards, effective_top_card, can_play_on } from './card'
+export { type Suit, type Rank, type Card, type Joker, type Game_card, type Rank_rule, type Ruleset, Direction, SUITS, RANKS, create_deck, create_deck_with_jokers, shuffle, RANK_VALUES, DEFAULT_RULESET, sort_cards, effective_top_card, can_play_on } from './card'
 export { type Player } from './player'
 export { type Base_command, type Validation_result } from './game'
 export { type Lobby_state, type Create_room_opts } from './lobby'

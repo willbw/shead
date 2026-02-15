@@ -1,5 +1,5 @@
-import type { Card, Player, Validation_result } from '@shead/shared'
-import { create_deck, shuffle, can_play_on, RANK_VALUES, effective_top_card, Direction } from '@shead/shared'
+import type { Card, Player, Validation_result, Ruleset } from '@shead/shared'
+import { create_deck, shuffle, can_play_on, Direction, DEFAULT_RULESET } from '@shead/shared'
 import type { Card_game_definition } from '@shead/game-engine'
 import type {
   Shithead_command,
@@ -95,6 +95,35 @@ function clone_state(state: Shithead_state): Shithead_state {
     ready_players: new Set(state.ready_players),
     last_effect: state.last_effect,
     last_revealed_card: state.last_revealed_card,
+  }
+}
+
+function apply_card_effect(
+  next: Shithead_state,
+  played_rank: string,
+  num_played: number,
+  ruleset: Ruleset,
+): void {
+  const rule = ruleset[played_rank as keyof Ruleset]
+  const effect = rule?.on_play ?? null
+
+  if (effect === 'burn' || check_four_of_a_kind_burn(next.discard_pile)) {
+    next.discard_pile = []
+    next.last_effect = 'burn'
+  } else if (effect === 'reverse') {
+    if (num_played % 2 === 1) {
+      next.direction = next.direction === Direction.CLOCKWISE ? Direction.COUNTER_CLOCKWISE : Direction.CLOCKWISE
+      next.last_effect = 'reverse'
+    } else {
+      next.last_effect = null
+    }
+    next.current_player_index = advance_turn(next)
+  } else if (effect === 'skip') {
+    next.last_effect = 'skip'
+    next.current_player_index = advance_turn_skip(next, num_played)
+  } else {
+    next.last_effect = null
+    next.current_player_index = advance_turn(next)
   }
 }
 
@@ -228,13 +257,13 @@ export const shithead_definition: Card_game_definition<
         return { valid: false, reason: 'Must use PLAY_FACE_DOWN when only face-down cards remain' }
       }
 
-      // Cards can come from hand and/or face_up (but not face_down)
-      const available = [...player_state.hand, ...player_state.face_up]
+      // Cards can only come from the current playable source
+      const available = source === 'hand' ? player_state.hand : player_state.face_up
       const cards: Card[] = []
       for (const card_id of cmd.card_ids) {
         const card = available.find((c) => c.id === card_id)
         if (!card) {
-          return { valid: false, reason: `Card ${card_id} not found in hand or face-up` }
+          return { valid: false, reason: `Card ${card_id} not found in ${source}` }
         }
         cards.push(card)
       }
@@ -258,6 +287,7 @@ export const shithead_definition: Card_game_definition<
   apply_command(state: Shithead_state, cmd: Shithead_command): Shithead_state {
     const next = clone_state(state)
     next.last_revealed_card = null
+    const ruleset = DEFAULT_RULESET
 
     if (cmd.type === 'PLAY_FACE_DOWN') {
       const ps = next.players.get(cmd.player_id)!
@@ -265,7 +295,7 @@ export const shithead_definition: Card_game_definition<
       ps.face_down = [...ps.face_down.slice(0, cmd.index), ...ps.face_down.slice(cmd.index + 1)]
       next.last_revealed_card = card
 
-      if (!can_play_on(card, next.discard_pile)) {
+      if (!can_play_on(card, next.discard_pile, ruleset)) {
         // Card can't be played — pick up pile + card into hand
         ps.hand = [...ps.hand, ...next.discard_pile, card]
         next.discard_pile = []
@@ -276,22 +306,7 @@ export const shithead_definition: Card_game_definition<
 
       // Card can be played — push to pile and apply effects
       next.discard_pile.push(card)
-
-      const played_rank = card.rank
-      if (played_rank === '10' || check_four_of_a_kind_burn(next.discard_pile)) {
-        next.discard_pile = []
-        next.last_effect = 'burn'
-      } else if (played_rank === 'Q') {
-        next.direction = next.direction === Direction.CLOCKWISE ? Direction.COUNTER_CLOCKWISE : Direction.CLOCKWISE
-        next.last_effect = 'reverse'
-        next.current_player_index = advance_turn(next)
-      } else if (played_rank === '8') {
-        next.last_effect = 'skip'
-        next.current_player_index = advance_turn_skip(next, 1)
-      } else {
-        next.last_effect = null
-        next.current_player_index = advance_turn(next)
-      }
+      apply_card_effect(next, card.rank, 1, ruleset)
 
       // Check if the player is now out
       if (is_player_out(ps)) {
@@ -345,48 +360,29 @@ export const shithead_definition: Card_game_definition<
     if (cmd.type === 'PLAY_CARD') {
       const ps = next.players.get(cmd.player_id)!
       const played_cards: Card[] = []
+      const source = get_playable_source(ps)
+      const played_from_hand = source === 'hand'
 
-      // Remove each card from whichever source it belongs to
+      // Remove each card from the active source
       for (const card_id of cmd.card_ids) {
-        const hand_result = remove_card(ps.hand, card_id)
-        if (hand_result) {
-          played_cards.push(hand_result.card)
-          ps.hand = hand_result.remaining
+        if (played_from_hand) {
+          const result = remove_card(ps.hand, card_id)!
+          played_cards.push(result.card)
+          ps.hand = result.remaining
         } else {
-          const face_up_result = remove_card(ps.face_up, card_id)!
-          played_cards.push(face_up_result.card)
-          ps.face_up = face_up_result.remaining
+          const result = remove_card(ps.face_up, card_id)!
+          played_cards.push(result.card)
+          ps.face_up = result.remaining
         }
       }
 
-      const played_from_hand = ps.hand.length < (state.players.get(cmd.player_id)!.hand.length)
-
       next.discard_pile.push(...played_cards)
 
-      // Check for special card effects
+      // Apply card effects via ruleset
       const played_rank = top_card(next.discard_pile)?.rank
       const num_played = cmd.card_ids.length
-
-      if (played_rank === '10' || check_four_of_a_kind_burn(next.discard_pile)) {
-        // Burn: clear pile, same player goes again
-        next.discard_pile = []
-        next.last_effect = 'burn'
-      } else if (played_rank === 'Q') {
-        // Reverse direction (odd number of Qs flips, even cancels)
-        if (num_played % 2 === 1) {
-          next.direction = next.direction === Direction.CLOCKWISE ? Direction.COUNTER_CLOCKWISE : Direction.CLOCKWISE
-          next.last_effect = 'reverse'
-        } else {
-          next.last_effect = null
-        }
-        next.current_player_index = advance_turn(next)
-      } else if (played_rank === '8') {
-        // Skip: each 8 skips one other player
-        next.last_effect = 'skip'
-        next.current_player_index = advance_turn_skip(next, num_played)
-      } else {
-        next.last_effect = null
-        next.current_player_index = advance_turn(next)
+      if (played_rank) {
+        apply_card_effect(next, played_rank, num_played, ruleset)
       }
 
       // Draw back up to minimum hand size if below it
