@@ -17,8 +17,14 @@ const TOKEN_KEY = 'shead_token'
 const PLAYER_ID_KEY = 'shead_player_id'
 
 // Only create socket in the browser
+// In production, connect to the same origin (no separate URL needed).
+// In dev, connect to the local server on port 3001.
+const server_url = browser
+  ? (import.meta.env.VITE_SERVER_URL || (import.meta.env.DEV ? 'http://localhost:3001' : ''))
+  : ''
+
 export const socket: Typed_socket = browser
-  ? io('http://localhost:3001', { autoConnect: false })
+  ? io(server_url, { autoConnect: false })
   : (undefined as unknown as Typed_socket)
 
 // Track whether a reconnection attempt is in progress

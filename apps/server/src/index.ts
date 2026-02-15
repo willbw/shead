@@ -1,6 +1,9 @@
 import { createServer } from 'node:http'
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { serve } from '@hono/node-server'
 import { Room_manager } from '@shead/game-engine'
 import { shithead_definition } from '@shead/games'
@@ -15,7 +18,16 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok' })
 })
 
-const PORT = 3001
+// Serve the SvelteKit static build in production
+const client_path = resolve(import.meta.dirname, '../../client/build')
+if (existsSync(client_path)) {
+  app.use('/*', serveStatic({ root: client_path }))
+  // SPA fallback: serve index.html for any route not matched above
+  app.get('*', serveStatic({ root: client_path, path: 'index.html' }))
+  console.log(`Serving client from ${client_path}`)
+}
+
+const PORT = Number(process.env.PORT) || 3001
 
 // Create the room manager and register games
 const room_manager = new Room_manager()
