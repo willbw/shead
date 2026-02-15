@@ -16,6 +16,11 @@
 	import GameStatus from '$lib/components/game_status.svelte'
 	import GinRummyGameTable from '$lib/components/gin_rummy/game_table.svelte'
 
+	const SHITHEAD_HINTS: Record<string, string> = {
+		'2': 'Reset', '3': 'Invisible', '7': '≤7', '8': 'Skip',
+		'9': 'Odd only', '10': 'Burn', 'Q': 'Reverse',
+	}
+
 	let { data } = $props()
 	const room_id = $derived(data.room_id)
 
@@ -457,12 +462,12 @@
 								<div class="relative" style="width: {show_effective ? 'calc(var(--card-w) * 1.6)' : 'var(--card-w)'}; height: var(--card-h)">
 									{#if show_effective && pile_effective}
 										<div class="absolute left-0 top-0">
-											<CardComponent card={pile_effective} on_pile />
+											<CardComponent card={pile_effective} extra_classes={pile_effective.rank === '3' ? 'opacity-50' : ''}>{#if SHITHEAD_HINTS[pile_effective.rank]}<span class="text-[7px] leading-none text-gray-400 hidden md:block">{SHITHEAD_HINTS[pile_effective.rank]}</span>{/if}</CardComponent>
 										</div>
 									{/if}
 									{#key pile_top.id}
 										<div class="absolute top-0 {show_effective ? 'right-0 rotate-6' : 'left-0'}" in:fly={{ y: -20, duration: 200 }}>
-											<CardComponent card={pile_top} on_pile />
+											<CardComponent card={pile_top} extra_classes={pile_top.rank === '3' ? 'opacity-50' : ''}>{#if SHITHEAD_HINTS[pile_top.rank]}<span class="text-[7px] leading-none text-gray-400 hidden md:block">{SHITHEAD_HINTS[pile_top.rank]}</span>{/if}</CardComponent>
 										</div>
 									{/key}
 								</div>
@@ -479,7 +484,7 @@
 					{#if revealing && gs.last_revealed_card}
 						<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
 							<div class="animate-reveal-card">
-								<CardComponent card={gs.last_revealed_card} />
+								<CardComponent card={gs.last_revealed_card}>{#if SHITHEAD_HINTS[gs.last_revealed_card.rank]}<span class="text-[7px] leading-none text-gray-400 hidden md:block">{SHITHEAD_HINTS[gs.last_revealed_card.rank]}</span>{/if}</CardComponent>
 							</div>
 						</div>
 					{/if}

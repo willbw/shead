@@ -53,12 +53,14 @@ function get_non_dealer(state: Gin_rummy_state): string {
   return state.player_order[0] === state.dealer ? state.player_order[1] : state.player_order[0]
 }
 
-function compute_deadwood_info(hand: Card[], phase: string, is_current: boolean): { own_deadwood_points: number; can_knock: boolean; can_gin: boolean } {
-  const { deadwood } = find_optimal_melds(hand)
+function compute_deadwood_info(hand: Card[], phase: string, is_current: boolean) {
+  const { melds, deadwood } = find_optimal_melds(hand)
   const points = calculate_deadwood_points(deadwood)
   const in_discard = phase === 'discard' && is_current
   return {
     own_deadwood_points: points,
+    own_melds: melds.map(m => m.map(c => c.id)),
+    own_deadwood_ids: deadwood.map(c => c.id),
     can_knock: in_discard && points > 0 && points <= 10,
     can_gin: in_discard && points === 0,
   }

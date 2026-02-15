@@ -44,6 +44,8 @@ export interface Visible_gin_rummy_state {
   last_drawn_from_discard_id: string | null
   last_drawn_card_id: string | null
   own_deadwood_points: number
+  own_melds: string[][]
+  own_deadwood_ids: string[]
   can_knock: boolean
   can_gin: boolean
 }

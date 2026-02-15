@@ -19,6 +19,11 @@
 
 	let { hand, face_up, face_down_count, discard_pile, selected_card_ids, phase, is_current_turn, on_card_click }: Props = $props()
 
+	const HINT_TEXT: Record<string, string> = {
+		'2': 'Reset', '3': 'Invisible', '7': '≤7', '8': 'Skip',
+		'9': 'Odd only', '10': 'Burn', 'Q': 'Reverse',
+	}
+
 	const sorted_hand = $derived(sort_cards(hand))
 
 	/** Set of card IDs that are not the first of their rank group (should overlap). */
@@ -50,6 +55,12 @@
 	const face_down_playable = $derived(hand.length === 0 && face_up.length === 0 && face_down_count > 0)
 </script>
 
+{#snippet card_hint(card: Card)}
+	{#if HINT_TEXT[card.rank]}
+		<span class="text-[7px] leading-none text-gray-400 hidden md:block">{HINT_TEXT[card.rank]}</span>
+	{/if}
+{/snippet}
+
 <div class="flex flex-col items-center gap-2">
 	{#if phase === 'swap'}
 		<!-- Swap phase: show both hand and face-up for swapping -->
@@ -66,7 +77,9 @@
 							{card}
 							selected={selected_card_ids.includes(card.id)}
 							onclick={() => on_card_click(card.id, 'hand')}
-						/>
+						>
+							{@render card_hint(card)}
+						</CardComponent>
 					</div>
 				{/each}
 			</div>
@@ -80,7 +93,9 @@
 							{card}
 							selected={selected_card_ids.includes(card.id)}
 							onclick={() => on_card_click(card.id, 'face_up')}
-						/>
+						>
+							{@render card_hint(card)}
+						</CardComponent>
 					</div>
 				{/each}
 			</div>
@@ -100,7 +115,9 @@
 							selected={selected_card_ids.includes(card.id)}
 							disabled={is_current_turn && !playable_card_ids.has(card.id)}
 							onclick={phase === 'play' ? () => on_card_click(card.id, 'hand') : undefined}
-						/>
+						>
+							{@render card_hint(card)}
+						</CardComponent>
 					</div>
 				{/each}
 			</div>
@@ -120,7 +137,9 @@
 								selected={selected_card_ids.includes(card.id)}
 								disabled={hand.length > 0 || (is_current_turn && !playable_card_ids.has(card.id))}
 								onclick={show_face_up_active && phase === 'play' ? () => on_card_click(card.id, 'face_up') : undefined}
-							/>
+							>
+								{@render card_hint(card)}
+							</CardComponent>
 						</div>
 					{/each}
 				</div>

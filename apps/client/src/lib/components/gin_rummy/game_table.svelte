@@ -21,25 +21,12 @@
 	const is_my_turn = $derived(gs?.current_player === my_id)
 
 	let selected_ids = $state<string[]>([])
-	let meld_groups = $state<string[][]>([])
-	let arranging_melds = $state(false)
 
 	function get_player_name(id: string): string {
 		return room?.players.find(p => p.id === id)?.name ?? id.slice(0, 6)
 	}
 
 	function handle_card_click(card_id: string) {
-		if (arranging_melds) {
-			// In meld arrangement mode, toggle selection
-			if (selected_ids.includes(card_id)) {
-				selected_ids = selected_ids.filter(id => id !== card_id)
-			} else {
-				selected_ids = [...selected_ids, card_id]
-			}
-			return
-		}
-
-		// Normal selection toggle
 		if (selected_ids.includes(card_id)) {
 			selected_ids = selected_ids.filter(id => id !== card_id)
 		} else {
@@ -67,44 +54,13 @@
 		selected_ids = []
 	}
 
-	function start_knock_arrangement() {
-		arranging_melds = true
-		meld_groups = []
+	async function handle_knock() {
+		await send_command({ type: 'KNOCK', melds: gs.own_melds })
 		selected_ids = []
 	}
 
-	function add_meld_group() {
-		if (selected_ids.length < 3) return
-		meld_groups = [...meld_groups, [...selected_ids]]
-		selected_ids = []
-	}
-
-	function cancel_arrangement() {
-		arranging_melds = false
-		meld_groups = []
-		selected_ids = []
-	}
-
-	async function submit_knock() {
-		// Any remaining selected cards go as a final meld if 3+
-		let final_melds = [...meld_groups]
-		if (selected_ids.length >= 3) {
-			final_melds = [...final_melds, [...selected_ids]]
-		}
-		await send_command({ type: 'KNOCK', melds: final_melds })
-		arranging_melds = false
-		meld_groups = []
-		selected_ids = []
-	}
-
-	async function submit_gin() {
-		let final_melds = [...meld_groups]
-		if (selected_ids.length >= 3) {
-			final_melds = [...final_melds, [...selected_ids]]
-		}
-		await send_command({ type: 'GIN', melds: final_melds })
-		arranging_melds = false
-		meld_groups = []
+	async function handle_gin() {
+		await send_command({ type: 'GIN', melds: gs.own_melds })
 		selected_ids = []
 	}
 
@@ -123,9 +79,6 @@
 		selected_ids = []
 	}
 
-	// Cards already used in arranged meld groups
-	const used_in_melds = $derived(new Set(meld_groups.flat()))
-
 	// Is the card the one just drawn from discard (can't re-discard it)?
 	function is_no_discard(card_id: string): boolean {
 		return gs?.last_drawn_from_discard_id === card_id
@@ -143,15 +96,33 @@
 	)
 
 	const SUIT_ORDER: Record<Suit, number> = { clubs: 0, diamonds: 1, spades: 2, hearts: 3 }
-	const sorted_hand = $derived(
-		gs?.own_hand
-			? [...gs.own_hand].sort((a, b) => {
-					const suit_diff = SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit]
-					if (suit_diff !== 0) return suit_diff
-					return GIN_RANK_ORDER[a.rank] - GIN_RANK_ORDER[b.rank]
-				})
-			: []
-	)
+
+	function sort_by_suit(cards: Card[]): Card[] {
+		return [...cards].sort((a, b) => {
+			const suit_diff = SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit]
+			if (suit_diff !== 0) return suit_diff
+			return GIN_RANK_ORDER[a.rank] - GIN_RANK_ORDER[b.rank]
+		})
+	}
+
+	// Organized hand: array of groups — each meld sorted, then deadwood sorted
+	const hand_groups = $derived.by(() => {
+		if (!gs?.own_hand) return []
+		const card_map = new Map(gs.own_hand.map(c => [c.id, c]))
+		const groups: { cards: Card[]; is_meld: boolean }[] = []
+
+		for (const meld_ids of gs.own_melds) {
+			const cards = meld_ids.map(id => card_map.get(id)).filter((c): c is Card => !!c)
+			groups.push({ cards: sort_by_suit(cards), is_meld: true })
+		}
+
+		const deadwood_cards = gs.own_deadwood_ids.map(id => card_map.get(id)).filter((c): c is Card => !!c)
+		if (deadwood_cards.length > 0) {
+			groups.push({ cards: sort_by_suit(deadwood_cards), is_meld: false })
+		}
+
+		return groups
+	})
 </script>
 
 {#if gs}
@@ -209,9 +180,7 @@
 					{/if}
 				{:else if gs.phase === 'discard'}
 					{#if is_my_turn}
-						{#if arranging_melds}
-							<span class="text-yellow-300">Select cards for each meld, then confirm</span>
-						{:else if gs.can_gin}
+						{#if gs.can_gin}
 							<span class="text-yellow-300">Discard or go Gin!</span>
 						{:else if gs.can_knock}
 							<span class="text-yellow-300">Discard or Knock (deadwood {gs.own_deadwood_points})</span>
@@ -325,35 +294,21 @@
 					</span>
 				{/if}
 			</div>
-			<div class="flex flex-wrap justify-center gap-1">
-				{#each sorted_hand as card (card.id)}
-					{@const in_meld = used_in_melds.has(card.id)}
-					<div class="{in_meld ? 'opacity-30' : ''}">
-						<CardComponent
-							{card}
-							selected={selected_ids.includes(card.id)}
-							disabled={in_meld}
-							onclick={() => { if (!in_meld) handle_card_click(card.id) }}
-						/>
+			<div class="flex flex-wrap justify-center items-end">
+				{#each hand_groups as group, gi (gi)}
+					<div class="flex {gi > 0 ? 'ml-3' : ''} {group.is_meld ? '' : 'gap-1'}">
+						{#each group.cards as card, ci (card.id)}
+							<div class="{group.is_meld && ci > 0 ? '-ml-[calc(var(--card-w)*0.45)]' : ''}">
+								<CardComponent
+									{card}
+									selected={selected_ids.includes(card.id)}
+									onclick={() => handle_card_click(card.id)}
+								/>
+							</div>
+						{/each}
 					</div>
 				{/each}
 			</div>
-
-			<!-- Arranged meld groups preview -->
-			{#if arranging_melds && meld_groups.length > 0}
-				<div class="mt-2 flex flex-wrap justify-center gap-2">
-					{#each meld_groups as group, i (i)}
-						<div class="flex gap-0.5 rounded border border-green-600 p-1">
-							{#each group as card_id (card_id)}
-								{@const card = gs.own_hand.find(c => c.id === card_id)}
-								{#if card}
-									<CardComponent {card} small />
-								{/if}
-							{/each}
-						</div>
-					{/each}
-				</div>
-			{/if}
 		</div>
 
 		<!-- Action buttons -->
@@ -391,57 +346,30 @@
 					{/if}
 				</div>
 			{:else if gs.phase === 'discard' && is_my_turn}
-				{#if arranging_melds}
-					<div class="flex flex-wrap justify-center gap-2">
+				<div class="flex flex-wrap justify-center gap-2">
+					<button
+						onclick={handle_discard}
+						disabled={selected_ids.length !== 1 || is_no_discard(selected_ids[0])}
+						class="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Discard{selected_ids.length === 1 ? '' : ' (select 1)'}
+					</button>
+					{#if gs.can_gin}
 						<button
-							onclick={add_meld_group}
-							disabled={selected_ids.length < 3}
-							class="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+							onclick={handle_gin}
+							class="rounded bg-yellow-600 px-4 py-2 text-sm font-medium hover:bg-yellow-500"
 						>
-							Add Meld ({selected_ids.length} selected)
+							Gin
 						</button>
-						{#if gs.can_knock}
-							<button
-								onclick={submit_knock}
-								class="rounded bg-orange-600 px-4 py-2 text-sm font-medium hover:bg-orange-500"
-							>
-								Knock
-							</button>
-						{/if}
-						{#if gs.can_gin}
-							<button
-								onclick={submit_gin}
-								class="rounded bg-yellow-600 px-4 py-2 text-sm font-medium hover:bg-yellow-500"
-							>
-								Gin
-							</button>
-						{/if}
+					{:else if gs.can_knock}
 						<button
-							onclick={cancel_arrangement}
-							class="rounded bg-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-500"
+							onclick={handle_knock}
+							class="rounded bg-orange-600 px-4 py-2 text-sm font-medium hover:bg-orange-500"
 						>
-							Cancel
+							Knock
 						</button>
-					</div>
-				{:else}
-					<div class="flex flex-wrap justify-center gap-2">
-						<button
-							onclick={handle_discard}
-							disabled={selected_ids.length !== 1 || is_no_discard(selected_ids[0])}
-							class="rounded bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							Discard{selected_ids.length === 1 ? '' : ' (select 1)'}
-						</button>
-						{#if gs.can_knock || gs.can_gin}
-							<button
-								onclick={start_knock_arrangement}
-								class="rounded bg-orange-600 px-4 py-2 text-sm font-medium hover:bg-orange-500"
-							>
-								{gs.can_gin ? 'Gin' : 'Knock'}
-							</button>
-						{/if}
-					</div>
-				{/if}
+					{/if}
+				</div>
 			{:else if gs.phase === 'knock_response' && is_my_turn}
 				<div class="flex gap-2">
 					{#if selected_ids.length > 0}
