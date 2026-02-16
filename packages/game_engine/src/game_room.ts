@@ -23,6 +23,8 @@ export class Game_room<
   private state: T_state | null = null
   private status: Game_room_status = 'waiting'
   private listeners: Room_listener[] = []
+  private replay_enabled: boolean = false
+  private replay_snapshots: T_state[] = []
 
   constructor(
     id: string,
@@ -36,6 +38,22 @@ export class Game_room<
 
   get_status(): Game_room_status {
     return this.status
+  }
+
+  set_replay_enabled(enabled: boolean): void {
+    if (this.status !== 'waiting') return
+    this.replay_enabled = enabled
+  }
+
+  is_replay_enabled(): boolean {
+    return this.replay_enabled
+  }
+
+  get_replay_states(): unknown[] {
+    if (!this.definition.get_replay_state) {
+      return this.replay_snapshots as unknown[]
+    }
+    return this.replay_snapshots.map((s) => this.definition.get_replay_state!(s))
   }
 
   get_players(): Player[] {
@@ -78,6 +96,9 @@ export class Game_room<
       return { valid: false, reason: `Need at least ${this.definition.min_players} players` }
     }
     this.state = this.definition.initial_state(this.config, this.get_players())
+    if (this.replay_enabled) {
+      this.replay_snapshots.push(this.state)
+    }
     this.status = 'in_progress'
     this.emit({ type: 'state_changed' })
     return { valid: true }
@@ -95,6 +116,9 @@ export class Game_room<
       return result
     }
     this.state = this.definition.apply_command(this.state, cmd)
+    if (this.replay_enabled) {
+      this.replay_snapshots.push(this.state)
+    }
     this.emit({ type: 'state_changed' })
     if (this.definition.is_game_over(this.state)) {
       this.status = 'finished'

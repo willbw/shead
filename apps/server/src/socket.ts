@@ -67,6 +67,7 @@ export function create_socket_server(
       players: room.get_players(),
       game_type: room.definition.id,
       status: room.get_status(),
+      replay_enabled: room.is_replay_enabled(),
     }
   }
 
@@ -413,12 +414,13 @@ export function create_socket_server(
         return
       }
 
-      // Practice rooms use default config (ignore game_config which may have a small deck)
-      const room = room_manager.create_room(game_type, {})
+      const room = room_manager.create_room(game_type, game_config)
       if (!room) {
         ack({ ok: false, reason: `Unknown game type: ${game_type}` })
         return
       }
+
+      room.set_replay_enabled(true)
 
       // Clamp bot_count based on game's max_players
       const max_bots = room.definition.max_players - 1
@@ -481,6 +483,38 @@ export function create_socket_server(
       ack(result)
     })
 
+    socket.on('lobby:set_replay', (enabled, ack) => {
+      const s = socket_sessions.get(socket.id)
+      if (!s) { ack({ ok: false, reason: 'No session' }); return }
+      if (!s.room_id) { ack({ ok: false, reason: 'Not in a room' }); return }
+      const room = room_manager.get_room(s.room_id)
+      if (!room) { ack({ ok: false, reason: 'Room not found' }); return }
+      if (room.get_status() !== 'waiting') {
+        ack({ ok: false, reason: 'Game already started' })
+        return
+      }
+      room.set_replay_enabled(enabled)
+      ack({ ok: true })
+      broadcast_lobby_update(room)
+    })
+
+    socket.on('replay:get', (ack) => {
+      const s = socket_sessions.get(socket.id)
+      if (!s) { ack({ ok: false, reason: 'No session' }); return }
+      if (!s.room_id) { ack({ ok: false, reason: 'Not in a room' }); return }
+      const room = room_manager.get_room(s.room_id)
+      if (!room) { ack({ ok: false, reason: 'Room not found' }); return }
+      if (room.get_status() !== 'finished') {
+        ack({ ok: false, reason: 'Game is not finished' })
+        return
+      }
+      if (!room.is_replay_enabled()) {
+        ack({ ok: false, reason: 'Replay not enabled for this game' })
+        return
+      }
+      ack({ ok: true, states: room.get_replay_states() })
+    })
+
     // Debug: skip to face-down phase for the calling player (shithead only)
     socket.on('debug:face_down_test' as any, (ack: any) => {
       const s = socket_sessions.get(socket.id)
@@ -533,6 +567,8 @@ export function create_socket_server(
     socket.removeAllListeners('lobby:start')
     socket.removeAllListeners('lobby:practice')
     socket.removeAllListeners('game:command')
+    socket.removeAllListeners('lobby:set_replay')
+    socket.removeAllListeners('replay:get')
     socket.removeAllListeners('debug:face_down_test')
     setup_session_handlers(socket, session)
   }

@@ -216,6 +216,8 @@ export function leave_room(): Promise<void> {
         game_store.game_state = null
         game_store.selected_card_ids = []
         game_store.scores = null
+        game_store.replay_states = null
+        game_store.replay_index = 0
         sessionStorage.removeItem(TOKEN_KEY)
         sessionStorage.removeItem(PLAYER_ID_KEY)
         resolve()
@@ -254,11 +256,39 @@ export function practice_vs_bot(game_type: string = 'shithead', difficulty: 'eas
     game_store.selected_card_ids = []
     game_store.scores = null
     game_store.error_message = null
+    game_store.replay_states = null
+    game_store.replay_index = 0
     socket.emit('lobby:practice', game_type, difficulty, bot_count, (result) => {
       if (result.ok) {
         lobby_store.room = result.room
         sessionStorage.setItem(TOKEN_KEY, result.player_token)
         resolve(result.room)
+      } else {
+        reject(new Error(result.reason))
+      }
+    })
+  })
+}
+
+export function set_replay_enabled(enabled: boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    socket.emit('lobby:set_replay', enabled, (result) => {
+      if (result.ok) {
+        resolve()
+      } else {
+        reject(new Error(result.reason))
+      }
+    })
+  })
+}
+
+export function fetch_replay(): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    socket.emit('replay:get', (result) => {
+      if (result.ok) {
+        game_store.replay_states = result.states
+        game_store.replay_index = 0
+        resolve(result.states)
       } else {
         reject(new Error(result.reason))
       }

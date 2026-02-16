@@ -33,9 +33,13 @@ export const game_store = $state<{
   selected_card_ids: string[]
   error_message: string | null
   scores: Record<string, number> | null
+  replay_states: unknown[] | null
+  replay_index: number
 }>({
   game_state: null,
   selected_card_ids: [],
   error_message: null,
   scores: null,
+  replay_states: null,
+  replay_index: 0,
 })

@@ -5,9 +5,10 @@
 	import type { Visible_gin_rummy_state } from '$lib/stores/gin_rummy.svelte'
 	import type { Card, Suit } from '@shead/shared'
 	import { GIN_RANK_ORDER } from '@shead/shared'
-	import { send_command } from '$lib/socket.svelte'
+	import { send_command, fetch_replay } from '$lib/socket.svelte'
 	import CardComponent from '$lib/components/card.svelte'
 	import CardBack from '$lib/components/card_back.svelte'
+	import ReplayViewer from '$lib/components/replay_viewer.svelte'
 
 	interface Props {
 		on_leave: () => void
@@ -82,6 +83,28 @@
 	// Is the card the one just drawn from discard (can't re-discard it)?
 	function is_no_discard(card_id: string): boolean {
 		return gs?.last_drawn_from_discard_id === card_id
+	}
+
+	const player_names = $derived.by(() => {
+		const names: Record<string, string> = {}
+		if (room) {
+			for (const p of room.players) {
+				names[p.id] = p.name
+			}
+		}
+		return names
+	})
+
+	let replay_loading = $state(false)
+	async function handle_view_replay() {
+		replay_loading = true
+		try {
+			await fetch_replay()
+		} catch {
+			// ignore
+		} finally {
+			replay_loading = false
+		}
 	}
 
 	const latest_round = $derived(gs?.round_history.length > 0 ? gs.round_history[gs.round_history.length - 1] : null)
@@ -391,34 +414,48 @@
 				</button>
 			{:else if gs.phase === 'finished'}
 				<div class="flex flex-col items-center gap-3">
-					{#each gs.player_order as pid (pid)}
-						<div class="flex items-center gap-2">
-							<span class="text-sm">{get_player_name(pid)}</span>
-							<span class="font-bold {(gs.scores[pid] ?? 0) >= gs.target_score ? 'text-yellow-300' : 'text-gray-300'}">{gs.scores[pid] ?? 0}</span>
-							{#if (gs.scores[pid] ?? 0) >= gs.target_score}
-								<span class="text-yellow-300 text-xs">Winner!</span>
-							{/if}
-						</div>
-					{/each}
-
-					<!-- Round history -->
-					{#if gs.round_history.length > 0}
-						<div class="w-full max-w-xs">
-							<p class="text-xs text-green-400 mb-1">Round History:</p>
-							<div class="space-y-0.5 max-h-32 overflow-y-auto">
-								{#each gs.round_history as round (round.round_number)}
-									<div class="text-xs text-gray-400">
-										R{round.round_number}:
-										{#if round.winner === null}
-											Draw
-										{:else}
-											{get_player_name(round.winner)} +{round.points_awarded}
-											{round.was_gin ? '(Gin)' : round.was_undercut ? '(Undercut)' : ''}
-										{/if}
-									</div>
-								{/each}
+					{#if game_store.replay_states}
+						<ReplayViewer game_type="gin-rummy" states={game_store.replay_states} {player_names} />
+					{:else}
+						{#each gs.player_order as pid (pid)}
+							<div class="flex items-center gap-2">
+								<span class="text-sm">{get_player_name(pid)}</span>
+								<span class="font-bold {(gs.scores[pid] ?? 0) >= gs.target_score ? 'text-yellow-300' : 'text-gray-300'}">{gs.scores[pid] ?? 0}</span>
+								{#if (gs.scores[pid] ?? 0) >= gs.target_score}
+									<span class="text-yellow-300 text-xs">Winner!</span>
+								{/if}
 							</div>
-						</div>
+						{/each}
+
+						<!-- Round history -->
+						{#if gs.round_history.length > 0}
+							<div class="w-full max-w-xs">
+								<p class="text-xs text-green-400 mb-1">Round History:</p>
+								<div class="space-y-0.5 max-h-32 overflow-y-auto">
+									{#each gs.round_history as round (round.round_number)}
+										<div class="text-xs text-gray-400">
+											R{round.round_number}:
+											{#if round.winner === null}
+												Draw
+											{:else}
+												{get_player_name(round.winner)} +{round.points_awarded}
+												{round.was_gin ? '(Gin)' : round.was_undercut ? '(Undercut)' : ''}
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						{#if room?.replay_enabled}
+							<button
+								onclick={handle_view_replay}
+								disabled={replay_loading}
+								class="rounded bg-purple-600 px-6 py-2 text-sm font-medium hover:bg-purple-500 disabled:opacity-50"
+							>
+								{replay_loading ? 'Loading...' : 'View Replay'}
+							</button>
+						{/if}
 					{/if}
 
 					<button

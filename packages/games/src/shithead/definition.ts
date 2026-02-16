@@ -564,6 +564,28 @@ export const shithead_definition: Card_game_definition<
     }
   },
 
+  get_replay_state(state: Shithead_state): unknown {
+    const players: Record<string, { hand: Card[]; face_up: Card[]; face_down: Card[] }> = {}
+    for (const [id, ps] of state.players) {
+      players[id] = {
+        hand: [...ps.hand],
+        face_up: [...ps.face_up],
+        face_down: [...ps.face_down],
+      }
+    }
+    return {
+      discard_pile: [...state.discard_pile],
+      deck_count: state.deck.length,
+      players,
+      current_player: get_current_player(state),
+      phase: state.phase,
+      player_order: [...state.player_order],
+      direction: state.direction,
+      last_effect: state.last_effect,
+      last_action: state.last_action,
+    }
+  },
+
   is_game_over(state: Shithead_state): boolean {
     return state.phase === 'finished'
   },

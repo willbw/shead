@@ -7,7 +7,7 @@
 	import type { Visible_shithead_state } from '$lib/stores/game.svelte'
 	import { effective_top_card, can_play_on, RANK_VALUES, DEFAULT_RULESET } from '@shead/shared'
 	import type { Card } from '@shead/shared'
-	import { connect, set_name, join_room, leave_room, start_game, send_command, reconnecting } from '$lib/socket.svelte'
+	import { connect, set_name, join_room, leave_room, start_game, send_command, set_replay_enabled, fetch_replay, reconnecting } from '$lib/socket.svelte'
 	import { fly } from 'svelte/transition'
 	import CardComponent from '$lib/components/card.svelte'
 	import CardBack from '$lib/components/card_back.svelte'
@@ -15,6 +15,7 @@
 	import OpponentZone from '$lib/components/opponent_zone.svelte'
 	import GameStatus from '$lib/components/game_status.svelte'
 	import GinRummyGameTable from '$lib/components/gin_rummy/game_table.svelte'
+	import ReplayViewer from '$lib/components/replay_viewer.svelte'
 
 	const SHITHEAD_HINTS: Record<string, string> = {
 		'2': 'Reset', '3': 'Invisible', '7': '≤7', '8': 'Skip',
@@ -302,6 +303,28 @@
 	const pile_top = $derived(gs && gs.discard_pile.length > 0 ? gs.discard_pile[gs.discard_pile.length - 1] : null)
 	const pile_effective = $derived(gs ? effective_top_card(gs.discard_pile) ?? null : null)
 	const show_effective = $derived(pile_top !== null && pile_top.rank === '3' && pile_effective !== null && pile_effective.id !== pile_top.id)
+
+	const player_names = $derived.by(() => {
+		const names: Record<string, string> = {}
+		if (room) {
+			for (const p of room.players) {
+				names[p.id] = p.name
+			}
+		}
+		return names
+	})
+
+	let replay_loading = $state(false)
+	async function handle_view_replay() {
+		replay_loading = true
+		try {
+			await fetch_replay()
+		} catch {
+			// ignore
+		} finally {
+			replay_loading = false
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handle_keydown} />
@@ -378,6 +401,16 @@
 						{/each}
 					</div>
 				</div>
+
+				<label class="flex items-center gap-2 text-sm text-green-300">
+					<input
+						type="checkbox"
+						checked={room.replay_enabled}
+						onchange={(e) => set_replay_enabled(e.currentTarget.checked)}
+						class="accent-green-500"
+					/>
+					Enable game replay
+				</label>
 
 				<div class="flex gap-3">
 					<button
@@ -523,27 +556,40 @@
 				<div class="area-actions flex flex-col items-center gap-1 bg-green-950 px-3 pb-3">
 					{#if gs.phase === 'finished'}
 						<div class="flex flex-col items-center gap-3">
-							<h1 class="text-2xl font-bold">Game Over!</h1>
-							{#if game_store.scores}
-								<div class="w-full max-w-xs rounded-lg bg-green-800 p-3">
-									<div class="space-y-1">
-										{#each Object.entries(game_store.scores).sort((a, b) => b[1] - a[1]) as [player_id, score] (player_id)}
-											<div class="flex items-center justify-between rounded bg-green-700 px-3 py-1.5">
-												<span class="text-sm">{get_player_name(player_id)}</span>
-												<span class="text-sm font-bold {score === 0 ? 'text-red-400' : 'text-green-300'}">
-													{score === 0 ? 'Shithead!' : 'Winner'}
-												</span>
-											</div>
+							{#if game_store.replay_states}
+								<ReplayViewer game_type="shithead" states={game_store.replay_states} {player_names} />
+							{:else}
+								<h1 class="text-2xl font-bold">Game Over!</h1>
+								{#if game_store.scores}
+									<div class="w-full max-w-xs rounded-lg bg-green-800 p-3">
+										<div class="space-y-1">
+											{#each Object.entries(game_store.scores).sort((a, b) => b[1] - a[1]) as [player_id, score] (player_id)}
+												<div class="flex items-center justify-between rounded bg-green-700 px-3 py-1.5">
+													<span class="text-sm">{get_player_name(player_id)}</span>
+													<span class="text-sm font-bold {score === 0 ? 'text-red-400' : 'text-green-300'}">
+														{score === 0 ? 'Shithead!' : 'Winner'}
+													</span>
+												</div>
+											{/each}
+										</div>
+									</div>
+								{/if}
+								{#if action_log.length > 0}
+									<div class="flex flex-col items-center">
+										{#each action_log.slice(-4) as text, i (text + i)}
+											<span class="text-xs italic text-gray-400">{text}</span>
 										{/each}
 									</div>
-								</div>
-							{/if}
-							{#if action_log.length > 0}
-								<div class="flex flex-col items-center">
-									{#each action_log.slice(-4) as text, i (text + i)}
-										<span class="text-xs italic text-gray-400">{text}</span>
-									{/each}
-								</div>
+								{/if}
+								{#if room?.replay_enabled}
+									<button
+										onclick={handle_view_replay}
+										disabled={replay_loading}
+										class="rounded bg-purple-600 px-6 py-2 text-sm font-medium hover:bg-purple-500 disabled:opacity-50"
+									>
+										{replay_loading ? 'Loading...' : 'View Replay'}
+									</button>
+								{/if}
 							{/if}
 							<button
 								onclick={handle_leave}

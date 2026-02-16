@@ -602,6 +602,30 @@ export const gin_rummy_definition: Card_game_definition<
     }
   },
 
+  get_replay_state(state: Gin_rummy_state): unknown {
+    const players: Record<string, { hand: Card[] }> = {}
+    for (const [id, ps] of state.players) {
+      players[id] = { hand: [...ps.hand] }
+    }
+    const scores: Record<string, number> = {}
+    for (const [id, score] of state.scores) {
+      scores[id] = score
+    }
+    return {
+      discard_pile: [...state.discard_pile],
+      stock_count: state.stock.length,
+      players,
+      current_player: state.current_player,
+      phase: state.phase,
+      player_order: [...state.player_order],
+      scores,
+      round_number: state.round_number,
+      knocker_id: state.knocker_id,
+      knocker_melds: state.knocker_melds ? state.knocker_melds.map(m => [...m]) : null,
+      knocker_deadwood: state.knocker_deadwood ? [...state.knocker_deadwood] : null,
+    }
+  },
+
   is_game_over(state: Gin_rummy_state): boolean {
     return state.phase === 'finished'
   },

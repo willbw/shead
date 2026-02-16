@@ -13,6 +13,7 @@ export interface Card_game_definition<
   validate_command(state: T_state, cmd: T_command): Validation_result
   apply_command(state: T_state, cmd: T_command): T_state
   get_visible_state(state: T_state, player_id: string): unknown
+  get_replay_state?(state: T_state): unknown
   is_game_over(state: T_state): boolean
   get_scores(state: T_state): Map<string, number>
 }

@@ -5,6 +5,7 @@ export interface Lobby_state {
   players: Player[]
   game_type: string
   status: 'waiting' | 'in_progress' | 'finished'
+  replay_enabled: boolean
 }
 
 export interface Create_room_opts {
