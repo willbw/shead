@@ -43,6 +43,7 @@ interface Session {
 }
 
 const DISCONNECT_TIMEOUT_MS = 60_000
+const ROOM_CLEANUP_AFTER_GAME_OVER_MS = 10 * 60_000 // 10 minutes
 
 export function create_socket_server(
   http_server: HttpServer,
@@ -625,7 +626,7 @@ export function create_socket_server(
           }
           room_manager.destroy_room(room.id)
           rooms_with_listeners.delete(room.id)
-        }, 60_000)
+        }, ROOM_CLEANUP_AFTER_GAME_OVER_MS)
       }
     })
   }
