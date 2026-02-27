@@ -78,3 +78,15 @@
 .animate-reveal-card {
   animation: reveal-card 1s ease-out forwards;
 }
+
+@keyframes cursor-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.6); }
+  50% { box-shadow: 0 0 8px 3px rgba(245, 158, 11, 0.8); }
+}
+
+.card-cursor {
+  animation: cursor-pulse 1.2s ease-in-out infinite;
+  outline: 2px solid rgb(245, 158, 11);
+  outline-offset: 1px;
+  border-radius: 0.5rem;
+}

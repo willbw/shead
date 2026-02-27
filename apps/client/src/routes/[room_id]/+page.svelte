@@ -5,7 +5,7 @@
 	import { lobby_store } from '$lib/stores/lobby.svelte'
 	import { game_store } from '$lib/stores/game.svelte'
 	import type { Visible_shithead_state } from '$lib/stores/game.svelte'
-	import { effective_top_card, can_play_on, RANK_VALUES, DEFAULT_RULESET } from '@shead/shared'
+	import { effective_top_card, can_play_on, sort_cards, RANK_VALUES, DEFAULT_RULESET } from '@shead/shared'
 	import type { Card } from '@shead/shared'
 	import { connect, set_name, join_room, leave_room, start_game, send_command, set_replay_enabled, fetch_replay, reconnecting } from '$lib/socket.svelte'
 	import { fly } from 'svelte/transition'
@@ -16,6 +16,8 @@
 	import GameStatus from '$lib/components/game_status.svelte'
 	import GinRummyGameTable from '$lib/components/gin_rummy/game_table.svelte'
 	import ReplayViewer from '$lib/components/replay_viewer.svelte'
+	import { keyboard_nav, reset_cursor, deactivate_cursor, type Nav_row } from '$lib/stores/keyboard_nav.svelte'
+	import { handle_keyboard_event, type Keyboard_context } from '$lib/keyboard_handler'
 
 	const SHITHEAD_HINTS: Record<string, string> = {
 		'2': 'Reset', '3': 'Invisible', '7': '≤7', '8': 'Skip',
@@ -97,8 +99,8 @@
 	const gs = $derived(game_store.game_state as Visible_shithead_state | null)
 	const my_id = $derived(connection_store.player_id)
 
-	// For swap phase: track which hand card is selected for swapping
-	let swap_hand_card_id = $state<string | null>(null)
+	// For swap phase: track the first card picked for swapping (from either row)
+	let swap_pick = $state<{ card_id: string; source: 'hand' | 'face_up' } | null>(null)
 
 	const is_my_turn = $derived(gs ? gs.current_player === my_id : false)
 
@@ -196,17 +198,33 @@
 
 	// --- Swap Phase ---
 	function handle_swap_card_click(card_id: string, source: 'hand' | 'face_up' | 'face_down') {
-		if (source === 'hand') {
-			swap_hand_card_id = swap_hand_card_id === card_id ? null : card_id
-		} else if (source === 'face_up' && swap_hand_card_id) {
-			send_command({
-				type: 'SWAP_CARD',
-				hand_card_id: swap_hand_card_id,
-				face_up_card_id: card_id,
-			})
-			swap_hand_card_id = null
+		if (source !== 'hand' && source !== 'face_up') return
+		if (!swap_pick) {
+			// First pick
+			swap_pick = { card_id, source }
+		} else if (swap_pick.source === source) {
+			// Same row — toggle or switch selection
+			swap_pick = swap_pick.card_id === card_id ? null : { card_id, source }
+		} else {
+			// Different row — complete the swap
+			const hand_card_id = source === 'hand' ? card_id : swap_pick.card_id
+			const face_up_card_id = source === 'face_up' ? card_id : swap_pick.card_id
+			send_command({ type: 'SWAP_CARD', hand_card_id, face_up_card_id })
+			swap_pick = null
 		}
 	}
+
+	/** Selected card IDs for swap phase — includes keyboard cursor card when browsing */
+	const swap_selected_ids = $derived.by(() => {
+		const ids: string[] = []
+		if (swap_pick) ids.push(swap_pick.card_id)
+		// Show cursor card as selected when browsing with keyboard
+		if (keyboard_nav.active && gs?.phase === 'swap') {
+			const cursor_id = card_id_at(keyboard_nav.row, keyboard_nav.col)
+			if (cursor_id && !ids.includes(cursor_id)) ids.push(cursor_id)
+		}
+		return ids
+	})
 
 	const am_ready = $derived(gs ? gs.ready_players.includes(my_id ?? '') : false)
 	const ready_count = $derived(gs ? gs.ready_players.length : 0)
@@ -274,30 +292,236 @@
 		game_store.selected_card_ids = []
 	}
 
-	async function handle_play_lowest() {
-		if (!gs || gs.phase !== 'play' || !is_my_turn) return
+	// --- Keyboard Navigation ---
+
+	/** Get the sorted hand (same order as PlayerHand renders) for cursor-to-card mapping */
+	const sorted_hand = $derived(gs ? sort_cards(gs.own_state.hand) : [])
+
+	/** Resolve which card rows are navigable in the current phase */
+	const available_rows = $derived.by((): Nav_row[] => {
+		if (!gs) return []
+		const rows: Nav_row[] = []
 		const own = gs.own_state
-		if (own.hand.length === 0 && own.face_up.length === 0 && own.face_down_count > 0) {
-			await send_command({ type: 'PLAY_FACE_DOWN', index: 0 })
+		if (gs.phase === 'swap') {
+			if (own.hand.length > 0) rows.push('hand')
+			if (own.face_up.length > 0) rows.push('face_up')
+			rows.push('actions') // Ready button
+		} else if (gs.phase === 'play') {
+			if (own.hand.length > 0) rows.push('hand')
+			else if (own.face_up.length > 0) rows.push('face_up')
+			else if (own.face_down_count > 0) rows.push('face_down')
+			if (is_my_turn || can_complete_four_of_a_kind) rows.push('actions')
+		}
+		return rows
+	})
+
+	/** Number of action buttons currently visible */
+	const action_button_count = $derived.by(() => {
+		if (!gs) return 0
+		if (gs.phase === 'swap') return 1 // Ready
+		if (gs.phase === 'play' && (is_my_turn || can_complete_four_of_a_kind)) {
+			let count = 1 // Play Card
+			if (is_my_turn && four_of_a_kind_cards) count++
+			if (is_my_turn && !has_playable_card && gs.discard_pile.length > 0 && (gs.own_state.hand.length > 0 || gs.own_state.face_up.length > 0)) count++
+			return count
+		}
+		return 0
+	})
+
+	/** Size of each navigable row */
+	const row_sizes = $derived.by((): Record<Nav_row, number> => {
+		if (!gs) return { hand: 0, face_up: 0, face_down: 0, actions: 0 }
+		const own = gs.own_state
+		return {
+			hand: sorted_hand.length,
+			face_up: own.face_up.length,
+			face_down: own.face_down_count,
+			actions: action_button_count,
+		}
+	})
+
+	/** Get card ID at a given row+col position */
+	function card_id_at(row: Nav_row, col: number): string | null {
+		if (!gs) return null
+		const own = gs.own_state
+		if (row === 'hand') return sorted_hand[col]?.id ?? null
+		if (row === 'face_up') return own.face_up[col]?.id ?? null
+		if (row === 'face_down') return `face_down_${col}`
+		return null
+	}
+
+	// Card desirability for face-up slots (higher = better to keep face-up)
+	// Best: 3, 10, 2, A, K, J, Q, 9, 8, 7, 6, 5, 4 (worst)
+	const FACE_UP_VALUE: Record<string, number> = {
+		'3': 13, '10': 12, '2': 11, 'A': 10, 'K': 9, 'J': 8,
+		'Q': 7, '9': 6, '8': 5, '7': 4, '6': 3, '5': 2, '4': 1,
+	}
+
+	/** Find the index of the worst card in a card array (lowest face-up value) */
+	function worst_card_index(cards: Card[]): number {
+		if (cards.length === 0) return 0
+		let worst = 0
+		for (let i = 1; i < cards.length; i++) {
+			if ((FACE_UP_VALUE[cards[i].rank] ?? 0) < (FACE_UP_VALUE[cards[worst].rank] ?? 0)) worst = i
+		}
+		return worst
+	}
+
+	function worst_face_up_index(): number {
+		return worst_card_index(gs?.own_state.face_up ?? [])
+	}
+
+	function worst_hand_index(): number {
+		return worst_card_index(sorted_hand)
+	}
+
+	/** Handle toggle selection from keyboard at a cursor position */
+	function kb_toggle_select(row: Nav_row, col: number) {
+		const card_id = card_id_at(row, col)
+		if (!card_id) return
+		if (gs?.phase === 'swap') {
+			// In swap phase, h/l just moves cursor — Enter confirms
+		} else if (gs?.phase === 'play') {
+			if (row === 'face_down') {
+				// For face-down, just highlight — Enter will play
+				game_store.selected_card_ids = [card_id]
+			} else {
+				handle_play_card_click(card_id, row as 'hand' | 'face_up')
+			}
+		}
+	}
+
+	/** Collect action button refs for keyboard Enter on actions row */
+	let action_button_refs: HTMLButtonElement[] = $state([])
+
+	function kb_confirm_action(col: number) {
+		action_button_refs[col]?.click()
+	}
+
+	function kb_confirm_cards() {
+		if (gs?.phase === 'swap') {
+			const row = keyboard_nav.row
+			if (row !== 'hand' && row !== 'face_up') return
+			const card_id = card_id_at(row, keyboard_nav.col)
+			if (!card_id) return
+
+			if (!swap_pick) {
+				// First pick — lock it in and jump to the other row
+				swap_pick = { card_id, source: row }
+				const other = row === 'hand' ? 'face_up' : 'hand'
+				keyboard_nav.row = other
+				keyboard_nav.col = other === 'face_up' ? worst_face_up_index() : worst_hand_index()
+			} else if (swap_pick.source === row) {
+				// Same row again — switch selection
+				swap_pick = { card_id, source: row }
+			} else {
+				// Different row — complete the swap
+				const hand_card_id = row === 'hand' ? card_id : swap_pick.card_id
+				const face_up_card_id = row === 'face_up' ? card_id : swap_pick.card_id
+				send_command({ type: 'SWAP_CARD', hand_card_id, face_up_card_id })
+				swap_pick = null
+				// Stay on whichever row we started from
+				keyboard_nav.col = Math.min(keyboard_nav.col, (row_sizes[keyboard_nav.row] || 1) - 1)
+			}
 			return
 		}
-		const source = own.hand.length > 0 ? own.hand : own.face_up
-		if (source.length === 0) return
-		const playable = source.filter(c => can_play_on(c, gs.discard_pile))
-		if (playable.length === 0) return
-		const special = (c: Card) => DEFAULT_RULESET[c.rank] ? 1 : 0
-		playable.sort((a, b) => special(a) - special(b) || RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
-		const lowest_rank = playable[0].rank
-		const to_play = playable.filter(c => c.rank === lowest_rank)
-		await send_command({ type: 'PLAY_CARD', card_ids: to_play.map(c => c.id) })
-		game_store.selected_card_ids = []
+		// In play phase, Enter plays selected cards or face-down card
+		if (keyboard_nav.row === 'face_down') {
+			const card_id = card_id_at('face_down', keyboard_nav.col)
+			if (card_id) {
+				handle_play_card_click(card_id, 'face_down')
+			}
+		} else {
+			handle_play()
+		}
+	}
+
+	function kb_deselect_all() {
+		if (gs?.phase === 'swap') {
+			swap_pick = null
+		} else {
+			game_store.selected_card_ids = []
+		}
 	}
 
 	function handle_keydown(e: KeyboardEvent) {
-		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-		if (e.key === 'l') handle_play_lowest()
-		if (e.key === 'Enter' && is_my_turn && gs && gs.discard_pile.length > 0) handle_pickup()
+		if (!gs || gs.phase === 'finished') return
+		const ctx: Keyboard_context = {
+			available_rows,
+			row_sizes,
+			on_toggle_select: kb_toggle_select,
+			on_confirm_cards: kb_confirm_cards,
+			on_confirm_action: kb_confirm_action,
+			on_deselect_all: kb_deselect_all,
+		}
+		handle_keyboard_event(e, ctx)
 	}
+
+	// Reset cursor on phase transitions
+	let prev_phase = ''
+	$effect(() => {
+		const phase = gs?.phase ?? ''
+		if (phase !== prev_phase) {
+			untrack(() => {
+				prev_phase = phase
+				reset_cursor()
+			})
+		}
+	})
+
+	// Clamp cursor col when card count changes
+	$effect(() => {
+		const size = row_sizes[keyboard_nav.row] ?? 0
+		if (keyboard_nav.col >= size && size > 0) {
+			keyboard_nav.col = size - 1
+		}
+	})
+
+	// Auto-select best play when it's our turn and state changes
+	// (covers turn start, burns, skips, 10s — any time we need to act again)
+	let prev_turn_key = ''
+	$effect(() => {
+		if (!gs || gs.phase !== 'play' || !is_my_turn) {
+			prev_turn_key = ''
+			return
+		}
+		// Fingerprint that changes each time the game state updates
+		const own = gs.own_state
+		const turn_key = `${gs.discard_pile.length}:${gs.deck_count}:${own.hand.length}:${own.face_up.length}:${own.face_down_count}`
+		if (turn_key === prev_turn_key) return
+		prev_turn_key = turn_key
+
+		untrack(() => {
+			// Prefer four-of-a-kind completion
+			if (four_of_a_kind_cards) {
+				game_store.selected_card_ids = four_of_a_kind_cards.map(c => c.id)
+				return
+			}
+
+			// Face-down: pre-select the first one
+			if (own.hand.length === 0 && own.face_up.length === 0) {
+				if (own.face_down_count > 0) {
+					game_store.selected_card_ids = ['face_down_0']
+				}
+				return
+			}
+
+			const source = own.hand.length > 0 ? own.hand : own.face_up
+			const playable = source.filter(c => can_play_on(c, gs!.discard_pile))
+			if (playable.length > 0) {
+				const special = (c: Card) => DEFAULT_RULESET[c.rank] ? 1 : 0
+				playable.sort((a, b) => special(a) - special(b) || RANK_VALUES[a.rank] - RANK_VALUES[b.rank])
+				const lowest_rank = playable[0].rank
+				game_store.selected_card_ids = playable.filter(c => c.rank === lowest_rank).map(c => c.id)
+			} else {
+				// Nothing playable — jump to actions row with Pick Up Pile highlighted
+				game_store.selected_card_ids = []
+				keyboard_nav.active = true
+				keyboard_nav.row = 'actions'
+				keyboard_nav.col = action_button_count - 1
+			}
+		})
+	})
 
 	// Discard pile top card + effective top (visible beneath 3s)
 	const pile_top = $derived(gs && gs.discard_pile.length > 0 ? gs.discard_pile[gs.discard_pile.length - 1] : null)
@@ -432,7 +656,8 @@
 			<GinRummyGameTable on_leave={handle_leave} />
 		{:else if gs}
 			<!-- Game Table (CSS Grid) -->
-			<div class="game-table bg-green-900">
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="game-table bg-green-900" onmousemove={deactivate_cursor}>
 				<!-- North: primary opponent -->
 				<div class="area-north flex justify-center p-2">
 					{#if positioned.north}
@@ -545,7 +770,7 @@
 						face_up={gs.own_state.face_up}
 						face_down_count={gs.own_state.face_down_count}
 						discard_pile={gs.discard_pile}
-						selected_card_ids={gs.phase === 'swap' ? (swap_hand_card_id ? [swap_hand_card_id] : []) : game_store.selected_card_ids}
+						selected_card_ids={gs.phase === 'swap' ? swap_selected_ids : game_store.selected_card_ids}
 						phase={gs.phase}
 						is_current_turn={is_my_turn}
 						on_card_click={gs.phase === 'swap' ? handle_swap_card_click : handle_play_card_click}
@@ -600,44 +825,52 @@
 						</div>
 					{:else if gs.phase === 'swap'}
 						<div class="flex gap-2">
-							{#if swap_hand_card_id}
-								<p class="text-sm text-yellow-300">Now tap a face-up card to swap</p>
+							{#if swap_pick}
+								<p class="text-sm text-yellow-300">Now tap a {swap_pick.source === 'hand' ? 'face-up' : 'hand'} card to swap</p>
 							{:else}
-								<p class="text-sm text-green-300">Tap a hand card, then a face-up card to swap</p>
+								<p class="text-sm text-green-300">Tap a card from either row, then one from the other to swap</p>
 							{/if}
 						</div>
 						<div class="flex flex-col items-center gap-1">
 							<button
+								bind:this={action_button_refs[0]}
 								onclick={handle_toggle_ready}
 								disabled={ready_pending}
 								class="rounded px-6 py-2 text-sm font-medium transition-colors disabled:opacity-50
-									{am_ready ? 'bg-green-600 hover:bg-green-500 ring-2 ring-green-400' : 'bg-purple-600 hover:bg-purple-500'}"
+									{am_ready ? 'bg-green-600 hover:bg-green-500 ring-2 ring-green-400' : 'bg-purple-600 hover:bg-purple-500'}
+									{keyboard_nav.active && keyboard_nav.row === 'actions' && keyboard_nav.col === 0 ? 'card-cursor' : ''}"
 							>
 								{am_ready ? 'Ready!' : 'Ready'}
 							</button>
 							<span class="text-xs text-green-400">{ready_count}/{total_players} ready</span>
 						</div>
 					{:else if gs.phase === 'play' && (is_my_turn || can_complete_four_of_a_kind)}
-						<div class="flex flex-wrap justify-center gap-2">
+							<div class="flex flex-wrap justify-center gap-2">
 							<button
+								bind:this={action_button_refs[0]}
 								onclick={handle_play}
 								disabled={game_store.selected_card_ids.length === 0}
-								class="rounded {can_complete_four_of_a_kind && !is_my_turn ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-blue-600 hover:bg-blue-500'} px-6 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+								class="rounded {can_complete_four_of_a_kind && !is_my_turn ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-blue-600 hover:bg-blue-500'} px-6 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed
+									{keyboard_nav.active && keyboard_nav.row === 'actions' && keyboard_nav.col === 0 ? 'card-cursor' : ''}"
 							>
 								{can_complete_four_of_a_kind && !is_my_turn ? 'Complete Four of a Kind!' : `Play Card${game_store.selected_card_ids.length > 1 ? 's' : ''}`}
 							</button>
 							{#if is_my_turn && four_of_a_kind_cards}
 								<button
+									bind:this={action_button_refs[1]}
 									onclick={handle_connect_four}
-									class="rounded bg-yellow-600 px-6 py-2 text-sm font-medium hover:bg-yellow-500"
+									class="rounded bg-yellow-600 px-6 py-2 text-sm font-medium hover:bg-yellow-500
+										{keyboard_nav.active && keyboard_nav.row === 'actions' && keyboard_nav.col === 1 ? 'card-cursor' : ''}"
 								>
 									Connect 4!
 								</button>
 							{/if}
 							{#if is_my_turn && !has_playable_card && gs.discard_pile.length > 0 && (gs.own_state.hand.length > 0 || gs.own_state.face_up.length > 0)}
 								<button
+									bind:this={action_button_refs[is_my_turn && four_of_a_kind_cards ? 2 : 1]}
 									onclick={handle_pickup}
-									class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500"
+									class="rounded bg-orange-600 px-6 py-2 text-sm font-medium hover:bg-orange-500
+										{keyboard_nav.active && keyboard_nav.row === 'actions' && keyboard_nav.col === (is_my_turn && four_of_a_kind_cards ? 2 : 1) ? 'card-cursor' : ''}"
 								>
 									Pick Up Pile
 								</button>

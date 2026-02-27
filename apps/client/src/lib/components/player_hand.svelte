@@ -67,7 +67,7 @@
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-xs text-gray-400 uppercase">Hand</span>
 			<div class="flex flex-wrap justify-center">
-				{#each sorted_hand as card (card.id)}
+				{#each sorted_hand as card, i (card.id)}
 					<div
 						class="{overlap_ids.has(card.id) ? '-ml-[calc(var(--card-w)*0.55)]' : 'ml-1'} first:ml-0"
 						transition:fly={{ y: 30, duration: 200 }}
@@ -87,7 +87,7 @@
 		<div class="flex flex-col items-center gap-1">
 			<span class="text-xs text-gray-400 uppercase">Face Up</span>
 			<div class="flex flex-wrap justify-center gap-1">
-				{#each face_up as card (card.id)}
+				{#each face_up as card, i (card.id)}
 					<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
 						<CardComponent
 							{card}
@@ -104,7 +104,7 @@
 		<!-- Play phase: show the active card source -->
 		{#if show_hand}
 			<div class="flex flex-wrap justify-center">
-				{#each sorted_hand as card (card.id)}
+				{#each sorted_hand as card, i (card.id)}
 					<div
 						class="{overlap_ids.has(card.id) ? '-ml-[calc(var(--card-w)*0.55)]' : 'ml-1'} first:ml-0"
 						transition:fly={{ y: 30, duration: 200 }}
@@ -130,7 +130,7 @@
 					<span class="text-xs text-gray-400 uppercase">Face Up</span>
 				{/if}
 				<div class="flex flex-wrap justify-center gap-1">
-					{#each face_up as card (card.id)}
+					{#each face_up as card, i (card.id)}
 						<div transition:fly={{ y: 30, duration: 200 }} animate:flip={{ duration: 200 }}>
 							<CardComponent
 								{card}
@@ -156,6 +156,7 @@
 					{#each { length: face_down_count } as _, i (i)}
 						<CardBack
 							small={!face_down_playable}
+							selected={selected_card_ids.includes(`face_down_${i}`)}
 							onclick={is_current_turn && face_down_playable ? () => on_card_click(`face_down_${i}`, 'face_down') : undefined}
 						/>
 					{/each}
